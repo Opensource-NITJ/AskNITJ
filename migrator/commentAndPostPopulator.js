@@ -1,8 +1,12 @@
 import Reddit from 'reddit';
 import dotenv from 'dotenv';
 import express from 'express';
-import { Pool } from 'pg';
-import { pipeline } from '@xenova/transformers';
+import { 
+  pool, 
+  initDatabase, 
+  generateEmbedding, 
+  cleanRedditText 
+} from '../lib/database.js';
 
 dotenv.config();
 
@@ -17,24 +21,6 @@ const reddit = new Reddit({
 const port = process.env.PORT || 8080;
 const app = express();
 app.use(express.json());
-
-const pool = new Pool({
-  user: process.env.PG_USER || 'postgres',
-  host: process.env.PG_HOST || 'localhost',
-  database: process.env.PG_DATABASE || 'local',
-  password: process.env.PG_PASSWORD || 'your_password',
-  port: process.env.PG_PORT || 5432,
-});
-
-let generateEmbedding;
-
-function cleanRedditText(text) {
-  return text
-    .replace(/https?:\/\/[^\s]+/g, '')
-    .replace(/[*\[\]#>`]+/g, '')
-    .replace(/[^\w\s.,!?]/g, '')
-    .trim();
-}
 
 function chunkText(text, maxTokens = 512) {
   const words = text.split(' ');
@@ -52,46 +38,6 @@ function chunkText(text, maxTokens = 512) {
   return chunks;
 }
 
-async function initEmbeddingModel() {
-  generateEmbedding = await pipeline('feature-extraction', 'Xenova/bge-m3');
-  console.log('Embedding model initialized: Xenova/bge-m3');
-}
-
-async function initDatabase() {
-  await pool.query('CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public');
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS posts (
-      id VARCHAR(50) PRIMARY KEY,
-      title TEXT NOT NULL,
-      selftext TEXT,
-      author VARCHAR(50) NOT NULL,
-      created_utc BIGINT NOT NULL,
-      url TEXT,
-      post_hint VARCHAR(50),
-      embedding vector(1024)
-    );
-  `);
-  await pool.query(`
-    ALTER TABLE posts
-    ADD COLUMN IF NOT EXISTS url TEXT,
-    ADD COLUMN IF NOT EXISTS post_hint VARCHAR(50);
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS comments (
-      id VARCHAR(50) PRIMARY KEY,
-      post_id VARCHAR(50) NOT NULL,
-      parent_id VARCHAR(50),
-      author VARCHAR(50) NOT NULL,
-      body TEXT NOT NULL,
-      created_utc BIGINT NOT NULL,
-      embedding vector(1024)
-    );
-  `);
-  await pool.query('CREATE INDEX IF NOT EXISTS posts_embedding_idx ON posts USING hnsw (embedding vector_cosine_ops)');
-  await pool.query('CREATE INDEX IF NOT EXISTS comments_embedding_idx ON comments USING hnsw (embedding vector_cosine_ops)');
-  console.log('Database initialized with pgvector');
-}
-
 async function initEmbeddings() {
   const postsResult = await pool.query('SELECT id, title, selftext, author FROM posts WHERE embedding IS NULL');
   const commentsResult = await pool.query('SELECT id, post_id, body, author FROM comments WHERE embedding IS NULL');
@@ -101,15 +47,15 @@ async function initEmbeddings() {
   for (const post of posts) {
     const rawText = `Post Title: ${post.title}\nPost Content: ${post.selftext || 'No text'}`;
     const chunks = chunkText(cleanRedditText(rawText));
-    const text = `passage: ${chunks[0]}`;
-    const output = await generateEmbedding(text, { pooling: 'mean', normalize: true });
+    const text = `${chunks[0]}`;
+    const output = await generateEmbedding(text);
     const embedding = Array.from(output.data);
     const embeddingString = `[${embedding.join(',')}]`;
     await pool.query('UPDATE posts SET embedding = $1 WHERE id = $2', [embeddingString, post.id]);
   }
   for (const comment of comments) {
-    const text = `passage: Comment on Post ${comment.post_id}: ${cleanRedditText(comment.body)}`;
-    const output = await generateEmbedding(text, { pooling: 'mean', normalize: true });
+    const text = `Comment on Post ${comment.post_id}: ${cleanRedditText(comment.body)}`;
+    const output = await generateEmbedding(text);
     const embedding = Array.from(output.data);
     const embeddingString = `[${embedding.join(',')}]`;
     await pool.query('UPDATE comments SET embedding = $1 WHERE id = $2', [embeddingString, comment.id]);
@@ -195,8 +141,8 @@ async function storePosts(posts) {
     if (exists.rows.length === 0) {
       const rawText = `Post Title: ${post.title}\nPost Content: ${post.selftext || 'No text'}`;
       const chunks = chunkText(cleanRedditText(rawText));
-      const text = `passage: ${chunks[0]}`;
-      const output = await generateEmbedding(text, { pooling: 'mean', normalize: true });
+      const text = `${chunks[0]}`;
+      const output = await generateEmbedding(text);
       const embedding = Array.from(output.data);
       const embeddingString = `[${embedding.join(',')}]`;
       await pool.query(
@@ -215,8 +161,8 @@ async function storeComments(comments) {
   for (const comment of comments) {
     const exists = await pool.query('SELECT id FROM comments WHERE id = $1', [comment.id]);
     if (exists.rows.length === 0) {
-      const text = `passage: Comment on Post ${comment.post_id}: ${cleanRedditText(comment.body)}`;
-      const output = await generateEmbedding(text, { pooling: 'mean', normalize: true });
+      const text = `Comment on Post ${comment.post_id}: ${cleanRedditText(comment.body)}`;
+      const output = await generateEmbedding(text);
       const embedding = Array.from(output.data);
       const embeddingString = `[${embedding.join(',')}]`;
       await pool.query(
@@ -231,7 +177,6 @@ async function storeComments(comments) {
 
 async function fetchAndStoreAllContent() {
   await initDatabase();
-  await initEmbeddingModel();
   const allPosts = await getAllPosts();
   await storePosts(allPosts);
   console.log(`Completed fetching and storing ${allPosts.length} posts`);
