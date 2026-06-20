@@ -18,8 +18,8 @@ async function storePosts(posts) {
       const exists = await pool.query('SELECT id FROM posts WHERE id = $1', [post.id]);
       if (exists.rows.length === 0) {
         const rawText = `Post Title: ${post.title}\nPost Content: ${post.selftext || 'No text'}`;
-        const text = `passage: ${cleanRedditText(rawText)}`;
-        const output = await generateEmbedding(text, { pooling: 'mean', normalize: true });
+        const text = `${cleanRedditText(rawText)}`;
+        const output = await generateEmbedding(text);
         const embedding = Array.from(output.data);
         const embeddingString = `[${embedding.join(',')}]`;
         await pool.query(
@@ -45,8 +45,8 @@ async function storeComments(comments) {
     for (const comment of comments) {
       const exists = await pool.query('SELECT id FROM comments WHERE id = $1', [comment.id]);
       if (exists.rows.length === 0) {
-        const text = `passage: Comment on Post ${comment.post_id}: ${cleanRedditText(comment.body)}`;
-        const output = await generateEmbedding(text, { pooling: 'mean', normalize: true });
+        const text = `Comment on Post ${comment.post_id}: ${cleanRedditText(comment.body)}`;
+        const output = await generateEmbedding(text);
         const embedding = Array.from(output.data);
         const embeddingString = `[${embedding.join(',')}]`;
         await pool.query(
@@ -69,8 +69,8 @@ async function storeDMs(messages) {
     for (const message of messages) {
       const exists = await pool.query('SELECT id FROM messages WHERE id = $1', [message.id]);
       if (exists.rows.length === 0) {
-        const text = `passage: Message: ${cleanRedditText(message.body)}`;
-        const output = await generateEmbedding(text, { pooling: 'mean', normalize: true });
+        const text = `Message: ${cleanRedditText(message.body)}`;
+        const output = await generateEmbedding(text);
         const embedding = Array.from(output.data);
         const embeddingString = `[${embedding.join(',')}]`;
         await pool.query(
@@ -92,7 +92,7 @@ async function getRelevantContextFromPgvector(item, isDM) {
     const queryText = isDM ? item.body : `${item.title} ${item.selftext || ''}`;
     const cleanedQuery = cleanRedditText(queryText);
     const tsQuery = cleanRedditText(queryText, true);
-    const queryEmbeddingOutput = await generateEmbedding(`query: ${cleanedQuery}`, { pooling: 'mean', normalize: true });
+    const queryEmbeddingOutput = await generateEmbedding(`${cleanedQuery}`, 'query');
     const queryEmbedding = Array.from(queryEmbeddingOutput.data);
     const embeddingString = `[${queryEmbedding.join(',')}]`;
 
@@ -104,7 +104,7 @@ async function getRelevantContextFromPgvector(item, isDM) {
 
       for (const file of wikiFiles) {
         const fileContent = fs.readFileSync(`${wikiDir}${file}`, 'utf-8');
-        const wikiEmbeddingOutput = await generateEmbedding(`passage: ${fileContent}`, { pooling: 'mean', normalize: true });
+        const wikiEmbeddingOutput = await generateEmbedding(`${fileContent}`);
         const wikiEmbedding = Array.from(wikiEmbeddingOutput.data);
         const similarity = cosineSimilarity(queryEmbedding, wikiEmbedding);
         
@@ -210,7 +210,7 @@ async function getRelevantContextFromPgvector(item, isDM) {
 
 async function validateResponseContent(content) {
   try {
-    const output = await generateEmbedding(`query: ${cleanRedditText(content)}`, { pooling: 'mean', normalize: true });
+    const output = await generateEmbedding(`${cleanRedditText(content)}`, 'query');
     const queryEmbedding = `[${Array.from(output.data).join(',')}]`;
 
     const commentsResult = await pool.query(`
