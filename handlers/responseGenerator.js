@@ -27,6 +27,42 @@ const responseSchema = {
   required: ['action', 'text'],
 };
 
+async function describeImage(base64Data, mimeType) {
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey) return '';
+  
+  const visionModel = 'qwen/qwen3.5-397b-a17b';
+  try {
+    console.log(`[VISION] Describing post image using ${visionModel}...`);
+    const content = [
+      {
+        type: 'text',
+        text: 'Analyze the visual content of this image in detail. Focus on text, humor, mood, and objects. Return only the description without any conversational filler.'
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          url: `data:${mimeType};base64,${base64Data}`
+        }
+      }
+    ];
+
+    const response = await openai.chat.completions.create({
+      model: visionModel,
+      messages: [{ role: 'user', content: content }],
+      temperature: 0.2,
+      max_tokens: 300,
+    });
+
+    const description = response.choices[0].message.content.trim();
+    console.log(`[VISION] Image description: "${description.slice(0, 150)}..."`);
+    return description;
+  } catch (error) {
+    console.error(`[VISION] Failed to describe image:`, error.message);
+    return '';
+  }
+}
+
 async function generateResponse(
   item,
   isDM = false,
@@ -69,6 +105,12 @@ async function generateResponse(
       'No specific past comments found. Answer using general college knowledge and wiki context.';
   }
 
+  
+  let imageDescription = '';
+  if (imageData) {
+    imageDescription = await describeImage(imageData, mimeType);
+  }
+
   try {
     console.log(
       `[${isDM ? 'DM' : 'POST'} ${item.id}] Generating response: ${title}`
@@ -97,6 +139,7 @@ If unanswerable, return { "action": "reply", "text": "0canthelpwiththisquery0" }
 Post Title: ${title}
 Post Content: ${contentText}
 Image URL: ${imageUrl || 'No image provided'}
+${imageDescription ? `Post Image Visual Content Description: ${imageDescription}` : ''}
 -----------------
 Use below mentioned data only for context and nothing else. Do not answer the questions below, It is for the information retrieval. Only answer the actual query of user in your response which is mentioned above. Again, Do not mention any of the context data in your response. Do not assume the belowmentioned to be part of query, but only the information that may or may not help your generate the actual response:
 Subreddit Context (Top Comments):
@@ -108,34 +151,6 @@ ${additionalContext}`;
 
         const modelName =
           process.env.GENERATION_MODEL || 'qwen/qwen3.5-122b-a10b';
-        const isVisionModel =
-          modelName.includes('vision') || modelName.includes('-vl');
-
-        let userContent;
-        if (isVisionModel) {
-          userContent = [
-            {
-              type: 'text',
-              text: prompt,
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${fs.readFileSync('./assets/placements2025.jpeg').toString('base64')}`,
-              },
-            },
-          ];
-          if (imageData) {
-            userContent.push({
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${imageData}`,
-              },
-            });
-          }
-        } else {
-          userContent = prompt;
-        }
 
         const messages = [
           {
@@ -144,7 +159,7 @@ ${additionalContext}`;
           },
           {
             role: 'user',
-            content: userContent,
+            content: prompt,
           },
         ];
 
@@ -223,7 +238,7 @@ ${additionalContext}`;
                 title,
                 contentText,
                 responseData.text,
-                candidates.slice(0, 3),
+                candidates.slice(0, 8),
                 modelName,
               );
               if (choice && choice >= 1 && choice <= candidates.length) {
@@ -273,31 +288,95 @@ ${additionalContext}`;
   }
 }
 
+async function fetchImageBase64(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    const contentType = res.headers.get('content-type') || 'image/png';
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return { contentType, base64 };
+  } catch (error) {
+    console.error(`[GIF FETCH] Failed to fetch still image from ${url}:`, error.message);
+    return null;
+  }
+}
+
 async function searchGiphy(query) {
   const apiKey = process.env.GIPHY_API_KEY;
   if (!apiKey) {
-    console.warn(
-      '[GIF WARN] GIPHY_API_KEY is not defined in the environment variables. Skipping GIF search.',
-    );
+    console.warn("[GIF WARN] GIPHY_API_KEY is not defined in the environment variables. Skipping GIF search.");
     return [];
   }
-  try {
-    const url = `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(query)}&limit=5&rating=pg-13`;
+  
+  let cleanedQuery = query;
+  if (query.includes('giphy.com/')) {
+    try {
+      const urlObj = new URL(query);
+      const pathname = urlObj.pathname;
+      const parts = pathname.split('/').filter(Boolean);
+      const lastPart = parts[parts.length - 1];
+      if (lastPart) {
+        cleanedQuery = decodeURIComponent(lastPart);
+      }
+    } catch (e) {
+      const parts = query.split('/');
+      const lastPart = parts[parts.length - 1] || parts[parts.length - 2];
+      if (lastPart) {
+        cleanedQuery = lastPart;
+      }
+    }
+  }
+
+  
+  cleanedQuery = cleanedQuery.replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  if (cleanedQuery !== query) {
+    console.log(`[GIF SEARCH] Cleaned search query: "${query}" -> "${cleanedQuery}"`);
+  }
+  
+  const fetchGifs = async (q) => {
+    const url = `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=8&rating=pg-13`;
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Giphy API error: ${response.statusText}`);
     }
     const json = await response.json();
-    if (json.data && json.data.length > 0) {
-      return json.data.map((item) => ({
+    return json.data || [];
+  };
+
+  try {
+    let data = await fetchGifs(cleanedQuery);
+    
+    
+    if (data.length === 0 && cleanedQuery.trim().includes(' ')) {
+      const words = cleanedQuery.trim().split(/\s+/);
+      if (words.length > 2) {
+        const simplified = words.slice(0, 2).join(' ');
+        console.log(`[GIF SEARCH] No results for "${cleanedQuery}". Trying simplified query: "${simplified}"`);
+        data = await fetchGifs(simplified);
+      }
+    }
+    
+    
+    if (data.length === 0 && cleanedQuery.trim().includes(' ')) {
+      const firstWord = cleanedQuery.trim().split(/\s+/)[0];
+      console.log(`[GIF SEARCH] No results. Trying first word: "${firstWord}"`);
+      data = await fetchGifs(firstWord);
+    }
+
+    if (data.length > 0) {
+      return data.map(item => ({
         id: item.id,
         url: item.images.original.url,
         title: item.title || 'Untitled GIF',
+        alt_text: item.alt_text || '',
+        still_url: item.images.fixed_width_still?.url || item.images.original_still?.url || ''
       }));
     }
     return [];
   } catch (error) {
-    console.error('Giphy search failed:', error.message);
+    console.error("Giphy search failed:", error.message);
     return [];
   }
 }
@@ -309,6 +388,15 @@ async function selectBestGif(
   candidates,
   modelName,
 ) {
+  const visionModel = 'qwen/qwen3.5-397b-a17b';
+  const isVisionModel = true;
+  
+  
+  const candidatesText = candidates.map((c, i) => {
+    const desc = c.alt_text ? ` (Description: ${c.alt_text})` : '';
+    return `${i + 1}. Title: "${c.title}"${desc} (ID: ${c.id})`;
+  }).join('\n');
+
   const prompt = `You are a helpful assistant. You must select the best GIF from the list below to accompany a Reddit reply.
 
 Post Title: "${postTitle}"
@@ -316,27 +404,68 @@ Post Content: "${postContent}"
 Our Reply: "${replyText}"
 
 GIF Candidates:
-${candidates.map((c, i) => `${i + 1}. Title: "${c.title}" (ID: ${c.id})`).join('\n')}
+${candidatesText}
 
 Which GIF best fits the context, tone, and humor of our reply?
-Respond with a valid JSON object matching the schema: { "choice": 1 | 2 | 3 | null }. Return null if none of the candidates fit well or if they are not funny/relevant.
+Respond with a valid JSON object matching the schema: { "choice": number | null }. 
+The "choice" field must be the integer index of your selection (1 to ${candidates.length}), or null if none of the candidates fit well or if they are not funny/relevant.
 Do not return anything else except the valid JSON.`;
 
   try {
+    let userContent;
+
+    if (isVisionModel) {
+      console.log(`[GIF SELECT] Model "${visionModel}" is a vision model. Fetching still images for ${candidates.length} candidates...`);
+      
+      const imagePromises = candidates.map(async (c, i) => {
+        if (c.still_url) {
+          const img = await fetchImageBase64(c.still_url);
+          return { index: i + 1, image: img };
+        }
+        return { index: i + 1, image: null };
+      });
+      const fetchedImages = await Promise.all(imagePromises);
+
+      userContent = [
+        {
+          type: 'text',
+          text: prompt
+        }
+      ];
+
+      fetchedImages.forEach((item) => {
+        if (item.image) {
+          userContent.push({
+            type: 'text',
+            text: `--- Still Image for GIF Candidate ${item.index} ---`
+          });
+          userContent.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${item.image.contentType};base64,${item.image.base64}`
+            }
+          });
+        }
+      });
+    } else {
+      userContent = prompt;
+    }
+
     const response = await openai.chat.completions.create({
-      model: modelName,
-      messages: [{ role: 'user', content: prompt }],
+      model: visionModel,
+      messages: [{ role: 'user', content: userContent }],
       response_format: { type: 'json_object' },
       temperature: 0.2,
     });
 
     const content = response.choices[0].message.content.trim();
+    console.log(`[GIF SELECT] LLM raw response:`, content);
     const result = JSON.parse(content);
     return result.choice;
   } catch (error) {
-    console.error('Error choosing GIF:', error.message);
+    console.error('[GIF SELECT] Error choosing GIF:', error.message);
     return null;
   }
 }
 
-export { generateResponse };
+export { generateResponse, searchGiphy, selectBestGif };
