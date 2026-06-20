@@ -18,6 +18,21 @@ const reddit = new Reddit({
   userAgent: 'NITJalandhar/1.0.0 (by Opensource@NITJalandhar)',
 });
 
+async function redditGetWithRetry(url, params, retries = 3, initialDelay = 3000) {
+  let delay = initialDelay;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await reddit.get(url, params);
+      return response;
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      console.warn(`[API WARNING] Reddit API call to ${url} failed (attempt ${i + 1}/${retries}): ${error.message}. Retrying in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay *= 2; // exponential backoff
+    }
+  }
+}
+
 function extractComments(commentListing, postId) {
   const comments = [];
   if (
@@ -87,7 +102,7 @@ async function seed() {
       console.log(
         `Fetching next batch of posts (after: ${after || 'beginning'})...`,
       );
-      const response = await reddit.get(`/r/${subreddit}/new`, {
+      const response = await redditGetWithRetry(`/r/${subreddit}/new`, {
         limit: 100,
         after: after,
         show: 'all',
@@ -126,12 +141,12 @@ async function seed() {
     }
 
     console.log(
-      `\nStarting ingestion for ${allPosts.length} posts with concurrency limit 8...`,
+      `\nStarting ingestion for ${allPosts.length} posts with concurrency limit 5...`,
     );
     let postStored = 0;
     let commentsStored = 0;
 
-    const CONCURRENCY_LIMIT = 8;
+    const CONCURRENCY_LIMIT = 5;
 
     await runWithLimit(allPosts, CONCURRENCY_LIMIT, async (post, i) => {
       console.log(
@@ -170,7 +185,7 @@ async function seed() {
       }
 
       try {
-        const commResponse = await reddit.get(`/comments/${post.id}`, {
+        const commResponse = await redditGetWithRetry(`/comments/${post.id}`, {
           limit: 500,
           depth: 10,
         });
@@ -219,6 +234,9 @@ async function seed() {
           commError.message,
         );
       }
+
+      // Respect Reddit's API limits by adding a short delay per post
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     });
 
     console.log(`\nSeeding completed successfully!`);
