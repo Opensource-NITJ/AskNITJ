@@ -13,7 +13,6 @@ const responseSchema = {
     text: { type: 'string' },
   },
   required: ['action', 'text'],
-  additionalProperties: false,
 };
 
 async function generateResponse(item, isDM = false, isComment = false, additionalContext = '') {
