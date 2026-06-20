@@ -23,7 +23,7 @@ async function storePosts(posts) {
         const embedding = Array.from(output.data);
         const embeddingString = `[${embedding.join(',')}]`;
         await pool.query(
-          'INSERT INTO posts (id, title, selftext, author, created_utc, url, post_hint, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          'INSERT INTO posts (id, title, selftext, author, created_utc, url, post_hint, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING',
           [post.id, post.title, post.selftext || '', post.author, post.created_utc, post.url || '', post.post_hint || '', embeddingString]
         );
         storedCount++;
@@ -50,7 +50,7 @@ async function storeComments(comments) {
         const embedding = Array.from(output.data);
         const embeddingString = `[${embedding.join(',')}]`;
         await pool.query(
-          'INSERT INTO comments (id, post_id, parent_id, author, body, created_utc, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          'INSERT INTO comments (id, post_id, parent_id, author, body, created_utc, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING',
           [comment.id, comment.post_id, comment.parent_id, comment.author, comment.body, comment.created_utc, embeddingString]
         );
         storedCount++;
@@ -74,7 +74,7 @@ async function storeDMs(messages) {
         const embedding = Array.from(output.data);
         const embeddingString = `[${embedding.join(',')}]`;
         await pool.query(
-          'INSERT INTO messages (id, sender, body, created_utc, embedding) VALUES ($1, $2, $3, $4, $5)',
+          'INSERT INTO messages (id, sender, body, created_utc, embedding) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING',
           [message.id, message.sender, message.body, message.created_utc, embeddingString]
         );
         storedCount++;

@@ -79,6 +79,10 @@ ${additionalContext}`;
         const model = genAI.getGenerativeModel({
           model: retries === 1 ? 'gemini-2.5-flash' : 'gemini-2.5-pro',
           systemInstruction,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema,
+          },
         });
         console.log(`Using API key index ${currentKeyIndex} for ${isDM ? 'message' : 'post'} ${item.id}`);
         console.log(`Using model ${retries === 1 ? 'gemini-2.5-flash' : 'gemini-2.5-pro'}`);
@@ -100,10 +104,7 @@ ${additionalContext}`;
                 },
               ]
             : []),
-        ], {
-          responseMimeType: 'application/json',
-          responseSchema,
-        });
+        ]);
 
         content = (await result.response.text()).replace('```json', '').replace('```', '').trim();
         console.log(`Raw model response for ${isDM ? 'message' : 'post'} ${item.id}:`, content);
