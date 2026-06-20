@@ -8,6 +8,7 @@ import pkg from 'jsonschema';
 const { Validator } = pkg;
 import chalk from 'chalk';
 import dotenv from 'dotenv';
+import fetch from 'node-fetch';
 
 dotenv.config();
 
@@ -19,11 +20,48 @@ const openai = new OpenAI({
 const responseSchema = {
   type: 'object',
   properties: {
-    action: { type: 'string', enum: ['reply', 'query_user'] },
+    action: { type: 'string', enum: ['reply', 'query_user', 'reply_with_gif'] },
     text: { type: 'string' },
+    gif_search_query: { type: 'string' },
   },
   required: ['action', 'text'],
 };
+
+async function describeImage(base64Data, mimeType) {
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey) return '';
+  
+  const visionModel = 'qwen/qwen3.5-397b-a17b';
+  try {
+    console.log(`[VISION] Describing post image using ${visionModel}...`);
+    const content = [
+      {
+        type: 'text',
+        text: 'Analyze the visual content of this image in detail. Focus on text, humor, mood, and objects. Return only the description without any conversational filler.'
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          url: `data:${mimeType};base64,${base64Data}`
+        }
+      }
+    ];
+
+    const response = await openai.chat.completions.create({
+      model: visionModel,
+      messages: [{ role: 'user', content: content }],
+      temperature: 0.2,
+      max_tokens: 300,
+    });
+
+    const description = response.choices[0].message.content.trim();
+    console.log(`[VISION] Image description: "${description.slice(0, 150)}..."`);
+    return description;
+  } catch (error) {
+    console.error(`[VISION] Failed to describe image:`, error.message);
+    return '';
+  }
+}
 
 async function generateResponse(
   item,
@@ -46,7 +84,7 @@ async function generateResponse(
       imageData = Buffer.from(await image.arrayBuffer()).toString('base64');
     } catch (error) {
       console.error(
-        `Error fetching image for ${isDM ? 'message' : 'post'} ${item.id}:`,
+        `[${isDM ? 'DM' : 'POST'} ${item.id}] Error fetching image:`,
         error.message,
       );
       imageUrl = null;
@@ -55,21 +93,27 @@ async function generateResponse(
 
   let contextText = await getRelevantContextFromPgvector(item, isDM);
   console.log(
-    `Context for ${isDM ? 'message' : 'post'} ${item.id} fetched successfully`,
+    `[${isDM ? 'DM' : 'POST'} ${item.id}] Context fetched successfully`
   );
-  console.log(`Context: ${contextText.slice(0, 200)}...`);
+  console.log(`[${isDM ? 'DM' : 'POST'} ${item.id}] Context: ${contextText.slice(0, 200)}...`);
 
   if (contextText === 'No context available') {
     console.log(
-      `No specific past comments found for ${isDM ? 'message' : 'post'} ${item.id}, using default base wiki context.`,
+      `[${isDM ? 'DM' : 'POST'} ${item.id}] No specific past comments found, using default base wiki context.`
     );
     contextText =
       'No specific past comments found. Answer using general college knowledge and wiki context.';
   }
 
+  
+  let imageDescription = '';
+  if (imageData) {
+    imageDescription = await describeImage(imageData, mimeType);
+  }
+
   try {
     console.log(
-      `Generating response for ${isDM ? 'message' : 'post'} ${item.id}: ${title}`,
+      `[${isDM ? 'DM' : 'POST'} ${item.id}] Generating response: ${title}`
     );
     let retries = 3;
     let content = null;
@@ -85,12 +129,17 @@ async function generateResponse(
         if (isComment) {
           contextText = '';
         }
-        const prompt = `You must respond with a valid JSON object matching the schema: { "action": "reply" | "query_user", "text": string }. For "reply", provide a concise (2-3 lines max), factual, but highly sarcastic, dank, and funny Hinglish reply (Hindi in Latin script) as a senior bhaiya, using the context. Never reply in plain English or standard AI tone. Be human, witty, and reference local lore if it fits. For Production Engineering, focus on core vs tech roles. For "query_user", return the username (without "u/") for user-specific queries (e.g., roasts or "who is"). If unanswerable, return { "action": "reply", "text": "0canthelpwiththisquery0" }. Do not return plain text or invalid JSON. Do not mention any attached placement stats image.
+        const prompt = `You must respond with a valid JSON object matching the schema: { "action": "reply" | "query_user" | "reply_with_gif", "text": string, "gif_search_query": string }. 
+For "reply", provide a concise (2-3 lines max), factual, but highly sarcastic, dank, and funny Hinglish reply (Hindi in Latin script) as a senior bhaiya, using the context. Never reply in plain English or standard AI tone. Be human, witty, and reference local lore if it fits. For Production Engineering, focus on core vs tech roles.
+For "reply_with_gif", write your Hinglish reply in "text", and provide a short, descriptive search query (e.g. "facepalm" or "screaming cat") in "gif_search_query". Use this when a visual meme/GIF would heavily amplify the sarcasm, roast, or humor of your reply.
+For "query_user", return the username (without "u/") for user-specific queries (e.g., roasts or "who is"). 
+If unanswerable, return { "action": "reply", "text": "0canthelpwiththisquery0" }. Do not return plain text or invalid JSON. Do not mention any attached placement stats image.
 -----------------
         This is the actual query of user.:
 Post Title: ${title}
 Post Content: ${contentText}
 Image URL: ${imageUrl || 'No image provided'}
+${imageDescription ? `Post Image Visual Content Description: ${imageDescription}` : ''}
 -----------------
 Use below mentioned data only for context and nothing else. Do not answer the questions below, It is for the information retrieval. Only answer the actual query of user in your response which is mentioned above. Again, Do not mention any of the context data in your response. Do not assume the belowmentioned to be part of query, but only the information that may or may not help your generate the actual response:
 Subreddit Context (Top Comments):
@@ -98,36 +147,10 @@ ${contextText}
 Additional Context:
 ${additionalContext}`;
 
-        console.log(chalk.green(prompt));
+        console.log(chalk.green(`\n=== PROMPT FOR [${isDM ? 'DM' : 'POST'} ${item.id}] ===\n${prompt}\n`));
 
-        const modelName = process.env.GENERATION_MODEL || 'qwen/qwen3.5-122b-a10b';
-        const isVisionModel = modelName.includes('vision') || modelName.includes('-vl');
-
-        let userContent;
-        if (isVisionModel) {
-          userContent = [
-            {
-              type: 'text',
-              text: prompt,
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${fs.readFileSync('./assets/placements2025.jpeg').toString('base64')}`,
-              },
-            },
-          ];
-          if (imageData) {
-            userContent.push({
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${imageData}`,
-              },
-            });
-          }
-        } else {
-          userContent = prompt;
-        }
+        const modelName =
+          process.env.GENERATION_MODEL || 'qwen/qwen3.5-122b-a10b';
 
         const messages = [
           {
@@ -136,7 +159,7 @@ ${additionalContext}`;
           },
           {
             role: 'user',
-            content: userContent,
+            content: prompt,
           },
         ];
 
@@ -166,7 +189,8 @@ ${additionalContext}`;
         }
 
         if (
-          responseData.action === 'reply' &&
+          (responseData.action === 'reply' ||
+            responseData.action === 'reply_with_gif') &&
           responseData.text.includes('0canthelpwiththisquery0')
         ) {
           return { action: 'reply', text: '0canthelpwiththisquery0' };
@@ -188,7 +212,8 @@ ${additionalContext}`;
         }
 
         if (
-          responseData.action === 'reply' &&
+          (responseData.action === 'reply' ||
+            responseData.action === 'reply_with_gif') &&
           responseData.text &&
           responseData.text.trim()
         ) {
@@ -199,6 +224,37 @@ ${additionalContext}`;
             );
           } catch (valErr) {
             console.warn(`Validation check failed/skipped:`, valErr.message);
+          }
+
+          if (responseData.action === 'reply_with_gif') {
+            const query = responseData.gif_search_query || 'meme';
+            console.log(`Searching Giphy for query: "${query}"`);
+            const candidates = await searchGiphy(query);
+            if (candidates.length > 0) {
+              console.log(
+                `Found ${candidates.length} GIF candidates. Asking LLM to choose the best fit...`,
+              );
+              const choice = await selectBestGif(
+                title,
+                contentText,
+                responseData.text,
+                candidates.slice(0, 8),
+                modelName,
+              );
+              if (choice && choice >= 1 && choice <= candidates.length) {
+                const selectedGif = candidates[choice - 1];
+                console.log(
+                  `Selected GIF candidate #${choice}: "${selectedGif.title}" (${selectedGif.url})`,
+                );
+                responseData.text = `${responseData.text}\n\n![gif](${selectedGif.url})`;
+              } else {
+                console.log(
+                  'LLM decided not to attach any of the GIF candidates.',
+                );
+              }
+            } else {
+              console.log(`No Giphy results found for query: "${query}"`);
+            }
           }
 
           return {
@@ -232,4 +288,184 @@ ${additionalContext}`;
   }
 }
 
-export { generateResponse };
+async function fetchImageBase64(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    const contentType = res.headers.get('content-type') || 'image/png';
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return { contentType, base64 };
+  } catch (error) {
+    console.error(`[GIF FETCH] Failed to fetch still image from ${url}:`, error.message);
+    return null;
+  }
+}
+
+async function searchGiphy(query) {
+  const apiKey = process.env.GIPHY_API_KEY;
+  if (!apiKey) {
+    console.warn("[GIF WARN] GIPHY_API_KEY is not defined in the environment variables. Skipping GIF search.");
+    return [];
+  }
+  
+  let cleanedQuery = query;
+  if (query.includes('giphy.com/')) {
+    try {
+      const urlObj = new URL(query);
+      const pathname = urlObj.pathname;
+      const parts = pathname.split('/').filter(Boolean);
+      const lastPart = parts[parts.length - 1];
+      if (lastPart) {
+        cleanedQuery = decodeURIComponent(lastPart);
+      }
+    } catch (e) {
+      const parts = query.split('/');
+      const lastPart = parts[parts.length - 1] || parts[parts.length - 2];
+      if (lastPart) {
+        cleanedQuery = lastPart;
+      }
+    }
+  }
+
+  
+  cleanedQuery = cleanedQuery.replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  if (cleanedQuery !== query) {
+    console.log(`[GIF SEARCH] Cleaned search query: "${query}" -> "${cleanedQuery}"`);
+  }
+  
+  const fetchGifs = async (q) => {
+    const url = `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=8&rating=pg-13`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Giphy API error: ${response.statusText}`);
+    }
+    const json = await response.json();
+    return json.data || [];
+  };
+
+  try {
+    let data = await fetchGifs(cleanedQuery);
+    
+    
+    if (data.length === 0 && cleanedQuery.trim().includes(' ')) {
+      const words = cleanedQuery.trim().split(/\s+/);
+      if (words.length > 2) {
+        const simplified = words.slice(0, 2).join(' ');
+        console.log(`[GIF SEARCH] No results for "${cleanedQuery}". Trying simplified query: "${simplified}"`);
+        data = await fetchGifs(simplified);
+      }
+    }
+    
+    
+    if (data.length === 0 && cleanedQuery.trim().includes(' ')) {
+      const firstWord = cleanedQuery.trim().split(/\s+/)[0];
+      console.log(`[GIF SEARCH] No results. Trying first word: "${firstWord}"`);
+      data = await fetchGifs(firstWord);
+    }
+
+    if (data.length > 0) {
+      return data.map(item => ({
+        id: item.id,
+        url: item.images.original.url,
+        title: item.title || 'Untitled GIF',
+        alt_text: item.alt_text || '',
+        still_url: item.images.fixed_width_still?.url || item.images.original_still?.url || ''
+      }));
+    }
+    return [];
+  } catch (error) {
+    console.error("Giphy search failed:", error.message);
+    return [];
+  }
+}
+
+async function selectBestGif(
+  postTitle,
+  postContent,
+  replyText,
+  candidates,
+  modelName,
+) {
+  const visionModel = 'qwen/qwen3.5-397b-a17b';
+  const isVisionModel = true;
+  
+  
+  const candidatesText = candidates.map((c, i) => {
+    const desc = c.alt_text ? ` (Description: ${c.alt_text})` : '';
+    return `${i + 1}. Title: "${c.title}"${desc} (ID: ${c.id})`;
+  }).join('\n');
+
+  const prompt = `You are a helpful assistant. You must select the best GIF from the list below to accompany a Reddit reply.
+
+Post Title: "${postTitle}"
+Post Content: "${postContent}"
+Our Reply: "${replyText}"
+
+GIF Candidates:
+${candidatesText}
+
+Which GIF best fits the context, tone, and humor of our reply?
+Respond with a valid JSON object matching the schema: { "choice": number | null }. 
+The "choice" field must be the integer index of your selection (1 to ${candidates.length}), or null if none of the candidates fit well or if they are not funny/relevant.
+Do not return anything else except the valid JSON.`;
+
+  try {
+    let userContent;
+
+    if (isVisionModel) {
+      console.log(`[GIF SELECT] Model "${visionModel}" is a vision model. Fetching still images for ${candidates.length} candidates...`);
+      
+      const imagePromises = candidates.map(async (c, i) => {
+        if (c.still_url) {
+          const img = await fetchImageBase64(c.still_url);
+          return { index: i + 1, image: img };
+        }
+        return { index: i + 1, image: null };
+      });
+      const fetchedImages = await Promise.all(imagePromises);
+
+      userContent = [
+        {
+          type: 'text',
+          text: prompt
+        }
+      ];
+
+      fetchedImages.forEach((item) => {
+        if (item.image) {
+          userContent.push({
+            type: 'text',
+            text: `--- Still Image for GIF Candidate ${item.index} ---`
+          });
+          userContent.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${item.image.contentType};base64,${item.image.base64}`
+            }
+          });
+        }
+      });
+    } else {
+      userContent = prompt;
+    }
+
+    const response = await openai.chat.completions.create({
+      model: visionModel,
+      messages: [{ role: 'user', content: userContent }],
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+    });
+
+    const content = response.choices[0].message.content.trim();
+    console.log(`[GIF SELECT] LLM raw response:`, content);
+    const result = JSON.parse(content);
+    return result.choice;
+  } catch (error) {
+    console.error('[GIF SELECT] Error choosing GIF:', error.message);
+    return null;
+  }
+}
+
+export { generateResponse, searchGiphy, selectBestGif };

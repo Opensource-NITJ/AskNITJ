@@ -198,12 +198,12 @@ async function getRelevantContextFromPgvector(item, isDM) {
       context += `Relevant Comments (Only use below for information, this will not be included in the query. Always refer to the title and selftext for the user's question. Dont blabber according to these):\n${sortedComments.map(c => `- ${c.body} (by ${c.author})`).join('\n')}\n\n`;
     }
 
-    console.log(`tsQuery: ${tsQuery}`);
-    console.log(`Context size: ${context.length} characters (${sortedPosts.length} posts, ${sortedComments.length} comments)`);
-    console.log(`Context: ${context.slice(0, 200)}...`);
+    console.log(`[${isDM ? 'DM' : 'POST'} ${item.id}] tsQuery: ${tsQuery}`);
+    console.log(`[${isDM ? 'DM' : 'POST'} ${item.id}] Context size: ${context.length} characters (${sortedPosts.length} posts, ${sortedComments.length} comments)`);
+    console.log(`[${isDM ? 'DM' : 'POST'} ${item.id}] Context: ${context.slice(0, 200)}...`);
     return context || 'No context available';
   } catch (error) {
-    console.error(`Error fetching context for ${isDM ? 'message' : 'post'} ${item.id}:`, error.message);
+    console.error(`[${isDM ? 'DM' : 'POST'} ${item.id}] Error fetching context:`, error.message);
     return 'No context available';
   }
 }
