@@ -108,7 +108,7 @@ async function getRelevantContextFromPgvector(item, isDM) {
         const wikiEmbedding = Array.from(wikiEmbeddingOutput.data);
         const similarity = cosineSimilarity(queryEmbedding, wikiEmbedding);
         
-        if (similarity > 0.5) {
+        if (similarity > 0.15) {
           wikiSimilarities.push({ file, content: fileContent, similarity });
         }
       }
