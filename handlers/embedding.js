@@ -1,5 +1,6 @@
 import { pool, generateEmbedding, getAllPostComments, cleanRedditText } from '../lib/database.js';
 import fs from 'fs';
+import path from 'path';
 
 function cosineSimilarity(vecA, vecB) {
   if (vecA.length !== vecB.length) return 0;
@@ -99,27 +100,85 @@ async function getRelevantContextFromPgvector(item, isDM) {
     const wikiDir = './assets/redditPosts/';
     let wikiContext = '';
     if (fs.existsSync(wikiDir)) {
-      const wikiFiles = fs.readdirSync(wikiDir).filter(file => file.endsWith('.txt') || file.endsWith('.md'));
-      const wikiSimilarities = [];
-
-      for (const file of wikiFiles) {
-        const fileContent = fs.readFileSync(`${wikiDir}${file}`, 'utf-8');
-        const wikiEmbeddingOutput = await generateEmbedding(`${fileContent}`);
-        const wikiEmbedding = Array.from(wikiEmbeddingOutput.data);
-        const similarity = cosineSimilarity(queryEmbedding, wikiEmbedding);
-        
-        if (similarity > 0.15) {
-          wikiSimilarities.push({ file, content: fileContent, similarity });
+      const normalizedQuery = cleanedQuery.toLowerCase();
+      
+      const isCompanyQuery = /compan(y|ies)|visit|schedule|recru|coming|calendar|date|month|january|february|march|november|december/i.test(normalizedQuery);
+      const isPlacementQuery = /placement|placed|package|ctc|salary|highest|average|median|offers|jobs/i.test(normalizedQuery);
+      
+      const matchedWikiFiles = []; 
+      
+      if (isCompanyQuery) {
+        console.log(`[RAG] Company intent detected. Including all company schedules.`);
+        const companiesDir = path.join(wikiDir, 'companies');
+        if (fs.existsSync(companiesDir)) {
+          const files = fs.readdirSync(companiesDir).filter(file => file.endsWith('.md') || file.endsWith('.txt'));
+          for (const file of files) {
+            const content = fs.readFileSync(path.join(companiesDir, file), 'utf-8');
+            matchedWikiFiles.push({ name: `companies/${file}`, content, similarity: 1.0 });
+          }
         }
       }
-
-      wikiSimilarities.sort((a, b) => b.similarity - a.similarity);
-      const relevantWikis = wikiSimilarities.slice(0, 3);
-
-      if (relevantWikis.length > 0) {
+      
+      if (isPlacementQuery) {
+        console.log(`[RAG] Placement intent detected.`);
+        const placementsDir = path.join(wikiDir, 'placements');
+        if (fs.existsSync(placementsDir)) {
+          const overviewPath = path.join(placementsDir, 'placements_overview_2026.md');
+          if (fs.existsSync(overviewPath)) {
+            const content = fs.readFileSync(overviewPath, 'utf-8');
+            matchedWikiFiles.push({ name: 'placements/placements_overview_2026.md', content, similarity: 1.0 });
+          }
+          
+          const files = fs.readdirSync(placementsDir).filter(file => file.endsWith('.md') && file !== 'placements_overview_2026.md');
+          const deptSimilarities = [];
+          for (const file of files) {
+            const content = fs.readFileSync(path.join(placementsDir, file), 'utf-8');
+            const docEmbedOut = await generateEmbedding(content);
+            const docEmbed = Array.from(docEmbedOut.data);
+            const similarity = cosineSimilarity(queryEmbedding, docEmbed);
+            if (similarity > 0.15) {
+              deptSimilarities.push({ name: `placements/${file}`, content, similarity });
+            }
+          }
+          deptSimilarities.sort((a, b) => b.similarity - a.similarity);
+          matchedWikiFiles.push(...deptSimilarities.slice(0, 2));
+        }
+      }
+      
+      const baseFiles = fs.readdirSync(wikiDir).filter(file => {
+        const fullPath = path.join(wikiDir, file);
+        return fs.statSync(fullPath).isFile() && (file.endsWith('.txt') || file.endsWith('.md'));
+      });
+      
+      const baseSimilarities = [];
+      for (const file of baseFiles) {
+        const content = fs.readFileSync(path.join(wikiDir, file), 'utf-8');
+        const docEmbedOut = await generateEmbedding(content);
+        const docEmbed = Array.from(docEmbedOut.data);
+        const similarity = cosineSimilarity(queryEmbedding, docEmbed);
+        if (similarity > 0.15) {
+          baseSimilarities.push({ name: file, content, similarity });
+        }
+      }
+      
+      baseSimilarities.sort((a, b) => b.similarity - a.similarity);
+      matchedWikiFiles.push(...baseSimilarities.slice(0, 2));
+      
+      const uniqueWikis = {};
+      for (const item of matchedWikiFiles) {
+        if (!uniqueWikis[item.name]) {
+          uniqueWikis[item.name] = item;
+        } else if (item.similarity > uniqueWikis[item.name].similarity) {
+          uniqueWikis[item.name] = item;
+        }
+      }
+      
+      const sortedWikis = Object.values(uniqueWikis).sort((a, b) => b.similarity - a.similarity);
+      
+      if (sortedWikis.length > 0) {
         wikiContext = 'Reddit Wiki Context:\n';
-        for (const wiki of relevantWikis) {
-          wikiContext += `\n---\nWiki from ${wiki.file} (similarity: ${wiki.similarity.toFixed(2)}):\n${wiki.content}\n`;
+        for (const wiki of sortedWikis) {
+          wikiContext += `\n---\nWiki from ${wiki.name} (similarity: ${wiki.similarity.toFixed(2)}):\n${wiki.content}\n`;
         }
       }
     }
