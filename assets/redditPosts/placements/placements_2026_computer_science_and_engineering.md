@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - COMPUTER SCIENCE AND ENGINEERING
+Keywords: cse, cs, computer science, cse placements, cse package, cse ctc, computer science placements 2026
 
 ## Key Statistics
 - **Total Offers**: 166

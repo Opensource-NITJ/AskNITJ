@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - CIVIL ENGINEERING
+Keywords: ce, civil engineering, civil, civil placements, ce placements, ce package, ce ctc, civil placements 2026
 
 ## Key Statistics
 - **Total Offers**: 57

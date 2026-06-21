@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - INFORMATION TECHNOLOGY
+Keywords: it, information technology, it placements, it package, it ctc, information technology placements 2026
 
 ## Key Statistics
 - **Total Offers**: 104

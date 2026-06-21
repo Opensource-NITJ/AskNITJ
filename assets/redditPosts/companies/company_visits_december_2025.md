@@ -1,4 +1,5 @@
 # NITJ Company Recruitment Visits & Schedules - December 2025
+Keywords: company visits december 2025, december placements, december schedule, companies list december, companies visiting in december
 
 Below is the list of companies visiting, online tests, interviews, and packages for **December 2025**:
 

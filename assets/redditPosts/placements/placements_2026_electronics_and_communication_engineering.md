@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - ELECTRONICS AND COMMUNICATION ENGINEERING
+Keywords: ece placements, ece package, ece ctc, electronics communication, circuital branch placements, ece average package, ece highest package, ece placements 2026
 
 ## Key Statistics
 - **Total Offers**: 92

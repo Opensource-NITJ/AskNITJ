@@ -1,4 +1,5 @@
 # NITJ Placement Statistics 2026 Overview
+Keywords: placement stats 2026, placement summary, placement percentage, highest package, average package, total placements, general placement statistics
 
 ## Overall Statistics
 - **Total Offers**: 923

@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - MECHANICAL ENGINEERING
+Keywords: me, mechanical engineering, mech, mechanical placements, me placements, me package, me ctc, mechanical placements 2026
 
 ## Key Statistics
 - **Total Offers**: 114

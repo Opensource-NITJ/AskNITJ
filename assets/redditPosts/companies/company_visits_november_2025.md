@@ -1,4 +1,5 @@
 # NITJ Company Recruitment Visits & Schedules - November 2025
+Keywords: company visits november 2025, november placements, november schedule, companies list november, companies visiting in november
 
 Below is the list of companies visiting, online tests, interviews, and packages for **November 2025**:
 

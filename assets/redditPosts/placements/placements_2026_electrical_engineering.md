@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - ELECTRICAL ENGINEERING
+Keywords: ee, electrical engineering, ee placements, ee package, ee ctc, electrical placements 2026
 
 ## Key Statistics
 - **Total Offers**: 52

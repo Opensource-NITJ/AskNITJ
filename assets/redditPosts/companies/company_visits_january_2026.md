@@ -1,4 +1,5 @@
 # NITJ Company Recruitment Visits & Schedules - January 2026
+Keywords: company visits january 2026, january placements, january schedule, companies list january, companies visiting in january
 
 Below is the list of companies visiting, online tests, interviews, and packages for **January 2026**:
 

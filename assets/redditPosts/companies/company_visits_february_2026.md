@@ -1,4 +1,5 @@
 # NITJ Company Recruitment Visits & Schedules - February 2026
+Keywords: company visits february 2026, february placements, february schedule, companies list february, companies visiting in february
 
 Below is the list of companies visiting, online tests, interviews, and packages for **February 2026**:
 

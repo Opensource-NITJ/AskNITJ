@@ -1,4 +1,5 @@
 # NITJ Company Recruitment Visits & Schedules - March 2026
+Keywords: company visits march 2026, march placements, march schedule, companies list march, companies visiting in march
 
 Below is the list of companies visiting, online tests, interviews, and packages for **March 2026**:
 
