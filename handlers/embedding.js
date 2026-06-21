@@ -99,7 +99,7 @@ async function getRelevantContextFromPgvector(item, isDM) {
     const wikiDir = './assets/redditPosts/';
     let wikiContext = '';
     if (fs.existsSync(wikiDir)) {
-      const wikiFiles = fs.readdirSync(wikiDir).filter(file => file.endsWith('.txt'));
+      const wikiFiles = fs.readdirSync(wikiDir).filter(file => file.endsWith('.txt') || file.endsWith('.md'));
       const wikiSimilarities = [];
 
       for (const file of wikiFiles) {
