@@ -5,6 +5,10 @@ import {
 } from './embedding.js';
 import fs from 'fs';
 import pkg from 'jsonschema';
+import { execSync } from 'child_process';
+import path from 'path';
+import ffmpeg from '@ffmpeg-installer/ffmpeg';
+import ffprobe from '@ffprobe-installer/ffprobe';
 const { Validator } = pkg;
 import chalk from 'chalk';
 import dotenv from 'dotenv';
@@ -63,6 +67,81 @@ async function describeImage(base64Data, mimeType) {
   }
 }
 
+async function describeVideo(videoUrl) {
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey) return '';
+
+  const tempDir = path.join(process.cwd(), 'scratch', `video_temp_${Date.now()}`);
+  try {
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    let duration = 10;
+    try {
+      const durationStr = execSync(`"${ffprobe.path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoUrl}"`).toString().trim();
+      const parsedDuration = parseFloat(durationStr);
+      if (!isNaN(parsedDuration) && parsedDuration > 0) {
+        duration = parsedDuration;
+        console.log(`[VISION] Video duration: ${duration}s`);
+      }
+    } catch (ffprobeErr) {
+      console.warn(`[VISION] Failed to probe video duration:`, ffprobeErr.message);
+    }
+
+    const fps = (5 / duration).toFixed(4);
+    console.log(`[VISION] Extracting frames from video URL: ${videoUrl} with fps=${fps}`);
+    const outputPattern = path.join(tempDir, 'frame_%03d.jpg');
+    execSync(`"${ffmpeg.path}" -y -i "${videoUrl}" -vf "fps=${fps}" -vframes 5 "${outputPattern}"`, { stdio: 'ignore' });
+
+    const files = fs.readdirSync(tempDir).filter(file => file.endsWith('.jpg')).sort();
+    if (files.length === 0) {
+      console.log('[VISION] No frames extracted from video.');
+      return '';
+    }
+
+    console.log(`[VISION] Describing video using ${files.length} extracted frames...`);
+
+    const content = [
+      {
+        type: 'text',
+        text: 'These are sequential keyframes from a video post on Reddit. Analyze the visual content, actions, text overlay, humor, and story shown across these frames in detail. Return a detailed, single description of the video.'
+      }
+    ];
+
+    for (const file of files) {
+      const filePath = path.join(tempDir, file);
+      const base64Data = fs.readFileSync(filePath).toString('base64');
+      content.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:image/jpeg;base64,${base64Data}`
+        }
+      });
+    }
+
+    const response = await openai.chat.completions.create({
+      model: 'qwen/qwen3.5-397b-a17b',
+      messages: [{ role: 'user', content: content }],
+      temperature: 0.2,
+      max_tokens: 350,
+    });
+
+    const description = response.choices[0].message.content.trim();
+    console.log(`[VISION] Video description: "${description.slice(0, 150)}..."`);
+    return description;
+  } catch (error) {
+    console.error(`[VISION] Failed to describe video:`, error.message);
+    return '';
+  } finally {
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch (cleanupError) {
+      console.error(`[VISION] Failed to clean up temp dir:`, cleanupError.message);
+    }
+  }
+}
+
 async function generateResponse(
   item,
   isDM = false,
@@ -111,6 +190,12 @@ async function generateResponse(
     imageDescription = await describeImage(imageData, mimeType);
   }
 
+  let videoUrl = !isDM && (item.is_video || item.post_hint === 'hosted:video') ? item.video_url : null;
+  let videoDescription = '';
+  if (videoUrl) {
+    videoDescription = await describeVideo(videoUrl);
+  }
+
   try {
     console.log(
       `[${isDM ? 'DM' : 'POST'} ${item.id}] Generating response: ${title}`
@@ -140,6 +225,8 @@ Post Title: ${title}
 Post Content: ${contentText}
 Image URL: ${imageUrl || 'No image provided'}
 ${imageDescription ? `Post Image Visual Content Description: ${imageDescription}` : ''}
+${videoUrl ? `Video URL: ${videoUrl}` : ''}
+${videoDescription ? `Post Video Visual Content Description (sequence of keyframes): ${videoDescription}` : ''}
 -----------------
 Use below mentioned data only for context and nothing else. Do not answer the questions below, It is for the information retrieval. Only answer the actual query of user in your response which is mentioned above. Again, Do not mention any of the context data in your response. Do not assume the belowmentioned to be part of query, but only the information that may or may not help your generate the actual response:
 Subreddit Context (Top Comments):

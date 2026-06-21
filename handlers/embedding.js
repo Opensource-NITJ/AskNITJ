@@ -23,8 +23,8 @@ async function storePosts(posts) {
         const embedding = Array.from(output.data);
         const embeddingString = `[${embedding.join(',')}]`;
         await pool.query(
-          'INSERT INTO posts (id, title, selftext, author, created_utc, url, post_hint, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING',
-          [post.id, post.title, post.selftext || '', post.author, post.created_utc, post.url || '', post.post_hint || '', embeddingString]
+          'INSERT INTO posts (id, title, selftext, author, created_utc, url, post_hint, video_url, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO NOTHING',
+          [post.id, post.title, post.selftext || '', post.author, post.created_utc, post.url || '', post.post_hint || '', post.video_url || '', embeddingString]
         );
         storedCount++;
         console.log(`Stored new post ${post.id} by ${post.author}: ${post.title}`);

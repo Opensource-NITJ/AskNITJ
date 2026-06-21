@@ -1,7 +1,7 @@
 import { generateResponse } from '../handlers/responseGenerator.js';
 import { replyToComment, getUserOverview } from '../lib/redditClient.js';
 import { getRelevantContextFromPgvector } from '../handlers/embedding.js';
-import { getCommentThread, getPostDetails, getAllPostComments, isParentByBot } from '../lib/database.js';
+import { getCommentThread, getPostDetails, getAllPostComments, isParentByBot, addComment } from '../lib/database.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -50,6 +50,7 @@ async function newCommentProcessor(comments) {
         `Post Content: ${post.selftext || 'No text'}`,
         `Post Author: ${post.author}`,
         `Image URL: ${post.post_hint === 'image' ? post.url : 'No image provided'}`,
+        `Video URL: ${post.post_hint === 'hosted:video' ? post.video_url : 'No video provided'}`,
         `Comment Thread:\n${threadContext || 'No thread context'}`,
         `Other Comments on Post:\n${otherCommentsContext || 'No other comments'}`,
         `Relevant Context from Database:\n${pgvectorContext || 'No relevant context'}`,
@@ -83,8 +84,23 @@ async function newCommentProcessor(comments) {
       }
 
       if (response.action === 'reply' && !response.text.includes('0canthelpwiththisquery0')) {
-        await replyToComment(comment.id, response.text);
+        const redditResponse = await replyToComment(comment.id, response.text);
         console.log(`Replied to comment ${comment.id}: ${response.text}`);
+
+        try {
+          const commentData = redditResponse.json.data.things[0].data;
+          const commentToSave = {
+            id: commentData.id,
+            post_id: commentData.link_id.split('_')[1],
+            parent_id: commentData.parent_id.split('_')[1],
+            author: commentData.author,
+            body: commentData.body,
+            created_utc: commentData.created_utc,
+          };
+          await addComment(commentToSave);
+        } catch (dbError) {
+          console.error(`Error storing bot comment reply in DB:`, dbError.message);
+        }
       } else {
         console.log(`Skipping comment ${comment.id}: Invalid response or '0canthelpwiththisquery0'`);
       }
