@@ -7,8 +7,6 @@ import fs from 'fs';
 import pkg from 'jsonschema';
 import { execSync } from 'child_process';
 import path from 'path';
-import ffmpeg from '@ffmpeg-installer/ffmpeg';
-import ffprobe from '@ffprobe-installer/ffprobe';
 const { Validator } = pkg;
 import chalk from 'chalk';
 import dotenv from 'dotenv';
@@ -69,33 +67,21 @@ async function describeImage(base64Data, mimeType) {
 
 function getFfmpegPath() {
   try {
-    execSync(`"${ffmpeg.path}" -version`, { stdio: 'ignore' });
-    return ffmpeg.path;
-  } catch (e) {
-    console.warn(`[VISION] NPM-installed ffmpeg failed/segfaulted. Falling back to system ffmpeg.`);
-    try {
-      execSync('ffmpeg -version', { stdio: 'ignore' });
-      return 'ffmpeg';
-    } catch (sysErr) {
-      console.error('[VISION] System ffmpeg not found.');
-      return ffmpeg.path;
-    }
+    execSync('ffmpeg -version', { stdio: 'ignore' });
+    return 'ffmpeg';
+  } catch (sysErr) {
+    console.error('[VISION] System ffmpeg not found in PATH.');
+    return 'ffmpeg';
   }
 }
 
 function getFfprobePath() {
   try {
-    execSync(`"${ffprobe.path}" -version`, { stdio: 'ignore' });
-    return ffprobe.path;
-  } catch (e) {
-    console.warn(`[VISION] NPM-installed ffprobe failed/segfaulted. Falling back to system ffprobe.`);
-    try {
-      execSync('ffprobe -version', { stdio: 'ignore' });
-      return 'ffprobe';
-    } catch (sysErr) {
-      console.error('[VISION] System ffprobe not found.');
-      return ffprobe.path;
-    }
+    execSync('ffprobe -version', { stdio: 'ignore' });
+    return 'ffprobe';
+  } catch (sysErr) {
+    console.error('[VISION] System ffprobe not found in PATH.');
+    return 'ffprobe';
   }
 }
 
