@@ -67,9 +67,44 @@ async function describeImage(base64Data, mimeType) {
   }
 }
 
+function getFfmpegPath() {
+  try {
+    execSync(`"${ffmpeg.path}" -version`, { stdio: 'ignore' });
+    return ffmpeg.path;
+  } catch (e) {
+    console.warn(`[VISION] NPM-installed ffmpeg failed/segfaulted. Falling back to system ffmpeg.`);
+    try {
+      execSync('ffmpeg -version', { stdio: 'ignore' });
+      return 'ffmpeg';
+    } catch (sysErr) {
+      console.error('[VISION] System ffmpeg not found.');
+      return ffmpeg.path;
+    }
+  }
+}
+
+function getFfprobePath() {
+  try {
+    execSync(`"${ffprobe.path}" -version`, { stdio: 'ignore' });
+    return ffprobe.path;
+  } catch (e) {
+    console.warn(`[VISION] NPM-installed ffprobe failed/segfaulted. Falling back to system ffprobe.`);
+    try {
+      execSync('ffprobe -version', { stdio: 'ignore' });
+      return 'ffprobe';
+    } catch (sysErr) {
+      console.error('[VISION] System ffprobe not found.');
+      return ffprobe.path;
+    }
+  }
+}
+
 async function describeVideo(videoUrl) {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) return '';
+
+  const ffmpegPath = getFfmpegPath();
+  const ffprobePath = getFfprobePath();
 
   const tempDir = path.join(process.cwd(), 'scratch', `video_temp_${Date.now()}`);
   try {
@@ -77,7 +112,7 @@ async function describeVideo(videoUrl) {
 
     let duration = 10;
     try {
-      const durationStr = execSync(`"${ffprobe.path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoUrl}"`).toString().trim();
+      const durationStr = execSync(`"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoUrl}"`).toString().trim();
       const parsedDuration = parseFloat(durationStr);
       if (!isNaN(parsedDuration) && parsedDuration > 0) {
         duration = parsedDuration;
@@ -90,7 +125,7 @@ async function describeVideo(videoUrl) {
     const fps = (5 / duration).toFixed(4);
     console.log(`[VISION] Extracting frames from video URL: ${videoUrl} with fps=${fps}`);
     const outputPattern = path.join(tempDir, 'frame_%03d.jpg');
-    execSync(`"${ffmpeg.path}" -y -i "${videoUrl}" -vf "fps=${fps}" -vframes 5 "${outputPattern}"`, { stdio: 'ignore' });
+    execSync(`"${ffmpegPath}" -y -i "${videoUrl}" -vf "fps=${fps}" -vframes 5 "${outputPattern}"`, { stdio: 'ignore' });
 
     const files = fs.readdirSync(tempDir).filter(file => file.endsWith('.jpg')).sort();
     if (files.length === 0) {
