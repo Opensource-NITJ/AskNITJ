@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - TEXTILE TECHNOLOGY
+Keywords: tt, textile technology, textile, textile placements, tt placements, tt package, tt ctc, textile placements 2026
 
 ## Key Statistics
 - **Total Offers**: 64

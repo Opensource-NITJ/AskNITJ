@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - BIO TECHNOLOGY
+Keywords: bt, bio technology, biotech, bio tech placements, bt placements, bt package, bt ctc, biotechnology placements 2026
 
 ## Key Statistics
 - **Total Offers**: 20

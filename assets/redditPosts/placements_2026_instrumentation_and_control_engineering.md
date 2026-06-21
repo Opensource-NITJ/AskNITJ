@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - INSTRUMENTATION AND CONTROL ENGINEERING
+Keywords: ice, instrumentation control, ice placements, ice package, ice ctc, instrumentation and control placements 2026
 
 ## Key Statistics
 - **Total Offers**: 108

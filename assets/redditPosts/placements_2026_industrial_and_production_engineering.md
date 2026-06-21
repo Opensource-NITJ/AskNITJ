@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - INDUSTRIAL AND PRODUCTION ENGINEERING
+Keywords: ipe, ip, industrial production, ipe placements, ipe package, ipe ctc, industrial engineering placements 2026
 
 ## Key Statistics
 - **Total Offers**: 71

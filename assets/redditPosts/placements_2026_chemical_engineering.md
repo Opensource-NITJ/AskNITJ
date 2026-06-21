@@ -1,4 +1,5 @@
 # NITJ 2026 Placement Stats - CHEMICAL ENGINEERING
+Keywords: che, chemical engineering, chem, chemical placements, che placements, che package, che ctc, chemical placements 2026
 
 ## Key Statistics
 - **Total Offers**: 75
