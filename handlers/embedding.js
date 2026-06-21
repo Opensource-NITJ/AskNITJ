@@ -107,20 +107,10 @@ async function getRelevantContextFromPgvector(item, isDM) {
       
       const matchedWikiFiles = []; 
       
-      if (isCompanyQuery) {
-        console.log(`[RAG] Company intent detected. Including all company schedules.`);
-        const companiesDir = path.join(wikiDir, 'companies');
-        if (fs.existsSync(companiesDir)) {
-          const files = fs.readdirSync(companiesDir).filter(file => file.endsWith('.md') || file.endsWith('.txt'));
-          for (const file of files) {
-            const content = fs.readFileSync(path.join(companiesDir, file), 'utf-8');
-            matchedWikiFiles.push({ name: `companies/${file}`, content, similarity: 1.0 });
-          }
-        }
-      }
-      
-      if (isPlacementQuery) {
-        console.log(`[RAG] Placement intent detected.`);
+      if (isCompanyQuery || isPlacementQuery) {
+        console.log(`[RAG] Placement/Company intent detected. Including placement stats & company schedules.`);
+        
+        // 1. Fetch placements overview + specific branch stats
         const placementsDir = path.join(wikiDir, 'placements');
         if (fs.existsSync(placementsDir)) {
           const overviewPath = path.join(placementsDir, 'placements_overview_2026.md');
@@ -142,6 +132,16 @@ async function getRelevantContextFromPgvector(item, isDM) {
           }
           deptSimilarities.sort((a, b) => b.similarity - a.similarity);
           matchedWikiFiles.push(...deptSimilarities.slice(0, 2));
+        }
+        
+        // 2. Fetch all company visit schedules
+        const companiesDir = path.join(wikiDir, 'companies');
+        if (fs.existsSync(companiesDir)) {
+          const files = fs.readdirSync(companiesDir).filter(file => file.endsWith('.md') || file.endsWith('.txt'));
+          for (const file of files) {
+            const content = fs.readFileSync(path.join(companiesDir, file), 'utf-8');
+            matchedWikiFiles.push({ name: `companies/${file}`, content, similarity: 1.0 });
+          }
         }
       }
       
