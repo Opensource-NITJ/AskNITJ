@@ -113,10 +113,12 @@ async function getRelevantContextFromPgvector(item, isDM) {
         // 1. Fetch placements overview + specific branch stats
         const placementsDir = path.join(wikiDir, 'placements');
         if (fs.existsSync(placementsDir)) {
-          const overviewPath = path.join(placementsDir, 'placements_overview_2026.md');
-          if (fs.existsSync(overviewPath)) {
-            const content = fs.readFileSync(overviewPath, 'utf-8');
-            matchedWikiFiles.push({ name: 'placements/placements_overview_2026.md', content, similarity: 1.0 });
+          if (isPlacementQuery) {
+            const overviewPath = path.join(placementsDir, 'placements_overview_2026.md');
+            if (fs.existsSync(overviewPath)) {
+              const content = fs.readFileSync(overviewPath, 'utf-8');
+              matchedWikiFiles.push({ name: 'placements/placements_overview_2026.md', content, similarity: 1.0 });
+            }
           }
           
           const files = fs.readdirSync(placementsDir).filter(file => file.endsWith('.md') && file !== 'placements_overview_2026.md');
@@ -126,22 +128,30 @@ async function getRelevantContextFromPgvector(item, isDM) {
             const docEmbedOut = await generateEmbedding(content);
             const docEmbed = Array.from(docEmbedOut.data);
             const similarity = cosineSimilarity(queryEmbedding, docEmbed);
-            if (similarity > 0.15) {
+            if (similarity > 0.25) {
               deptSimilarities.push({ name: `placements/${file}`, content, similarity });
             }
           }
           deptSimilarities.sort((a, b) => b.similarity - a.similarity);
-          matchedWikiFiles.push(...deptSimilarities.slice(0, 2));
+          matchedWikiFiles.push(...deptSimilarities.slice(0, 1));
         }
         
-        // 2. Fetch all company visit schedules
+        // 2. Fetch only the most relevant company visit schedule
         const companiesDir = path.join(wikiDir, 'companies');
         if (fs.existsSync(companiesDir)) {
           const files = fs.readdirSync(companiesDir).filter(file => file.endsWith('.md') || file.endsWith('.txt'));
+          const companySimilarities = [];
           for (const file of files) {
             const content = fs.readFileSync(path.join(companiesDir, file), 'utf-8');
-            matchedWikiFiles.push({ name: `companies/${file}`, content, similarity: 1.0 });
+            const docEmbedOut = await generateEmbedding(content);
+            const docEmbed = Array.from(docEmbedOut.data);
+            const similarity = cosineSimilarity(queryEmbedding, docEmbed);
+            if (similarity > 0.25) {
+              companySimilarities.push({ name: `companies/${file}`, content, similarity });
+            }
           }
+          companySimilarities.sort((a, b) => b.similarity - a.similarity);
+          matchedWikiFiles.push(...companySimilarities.slice(0, 1));
         }
       }
       
@@ -156,13 +166,13 @@ async function getRelevantContextFromPgvector(item, isDM) {
         const docEmbedOut = await generateEmbedding(content);
         const docEmbed = Array.from(docEmbedOut.data);
         const similarity = cosineSimilarity(queryEmbedding, docEmbed);
-        if (similarity > 0.15) {
+        if (similarity > 0.25) {
           baseSimilarities.push({ name: file, content, similarity });
         }
       }
       
       baseSimilarities.sort((a, b) => b.similarity - a.similarity);
-      matchedWikiFiles.push(...baseSimilarities.slice(0, 2));
+      matchedWikiFiles.push(...baseSimilarities.slice(0, 1));
       
       const uniqueWikis = {};
       for (const item of matchedWikiFiles) {
@@ -209,27 +219,36 @@ async function getRelevantContextFromPgvector(item, isDM) {
 
     const combinedPosts = [...vectorPostResult.rows, ...keywordPostResult.rows].reduce((acc, row) => {
       acc[row.id] = acc[row.id] || row;
-      acc[row.id].similarity = Math.max(acc[row.id].similarity || 0, row.similarity || 0);
+      const similarity = row.similarity !== undefined ? row.similarity : 0.3;
+      acc[row.id].similarity = Math.max(acc[row.id].similarity || 0, similarity);
       return acc;
     }, {});
-    const sortedPosts = Object.values(combinedPosts).sort((a, b) => (b.similarity || 0) - (a.similarity || 0)).slice(0, 5);
+    
+    // Only keep posts with similarity > 0.25 and slice to top 2 (was 5)
+    const sortedPosts = Object.values(combinedPosts)
+      .filter(post => (post.similarity || 0) > 0.25)
+      .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
+      .slice(0, 2);
 
-    let context = ''
+    let context = '';
     for (const post of sortedPosts) {
       context += `Post Title (Only Use it for Context): ${post.title}\nContent (Only Use it for Context): ${post.selftext || 'No text'}\n`;
       const comments = await getAllPostComments(post.id, []);
-      context += `Comments:\n${comments.length > 0 ? comments.map(c => `- ${c.body} (by ${c.author})`).join('\n') : 'No comments'}\n\n`;
+      // Filter out comments from the bot itself and limit to the top 5 comments
+      const filteredComments = comments.filter(c => c.author !== process.env.REDDIT_USERNAME);
+      const limitedComments = filteredComments.slice(0, 5);
+      context += `Comments:\n${limitedComments.length > 0 ? limitedComments.map(c => `- ${c.body} (by ${c.author})`).join('\n') : 'No comments'}\n\n`;
     }
     context += wikiContext ? `\nUse these reddit posts as a source of information (wikis), do not include these as a part of query:\n\n${wikiContext}` : '';
 
     const vectorCommentQuery = `
       SELECT id, post_id, body, author, 1 - (embedding <=> $1) AS similarity
       FROM comments
-      WHERE embedding IS NOT NULL
+      WHERE embedding IS NOT NULL AND author != $2
       ORDER BY similarity DESC
       LIMIT 10
     `;
-    const vectorCommentResult = await pool.query(vectorCommentQuery, [embeddingString]);
+    const vectorCommentResult = await pool.query(vectorCommentQuery, [embeddingString, process.env.REDDIT_USERNAME || 'AskNITJ']);
 
     let keywordCommentResult = { rows: [] };
     if (tsQuery) {
@@ -237,10 +256,10 @@ async function getRelevantContextFromPgvector(item, isDM) {
         const keywordCommentQuery = `
           SELECT id, post_id, body, author
           FROM comments
-          WHERE to_tsvector('english', body) @@ to_tsquery('english', $1)
+          WHERE to_tsvector('english', body) @@ to_tsquery('english', $1) AND author != $2
           LIMIT 10
         `;
-        keywordCommentResult = await pool.query(keywordCommentQuery, [tsQuery.replace(/\s+/g, ' & ')]);
+        keywordCommentResult = await pool.query(keywordCommentQuery, [tsQuery.replace(/\s+/g, ' & '), process.env.REDDIT_USERNAME || 'AskNITJ']);
       } catch (error) {
         console.warn(`Keyword search for comments failed: ${error.message}`);
       }
@@ -248,10 +267,16 @@ async function getRelevantContextFromPgvector(item, isDM) {
 
     const combinedComments = [...vectorCommentResult.rows, ...keywordCommentResult.rows].reduce((acc, row) => {
       acc[row.id] = acc[row.id] || row;
-      acc[row.id].similarity = Math.max(acc[row.id].similarity || 0, row.similarity || 0);
+      const similarity = row.similarity !== undefined ? row.similarity : 0.3;
+      acc[row.id].similarity = Math.max(acc[row.id].similarity || 0, similarity);
       return acc;
     }, {});
-    const sortedComments = Object.values(combinedComments).sort((a, b) => (b.similarity || 0) - (a.similarity || 0)).slice(0, 5);
+    
+    // Only keep comments with similarity > 0.25 and slice to top 3 (was 5)
+    const sortedComments = Object.values(combinedComments)
+      .filter(comment => (comment.similarity || 0) > 0.25)
+      .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
+      .slice(0, 3);
 
     if (sortedComments.length > 0) {
       context += `Relevant Comments (Only use below for information, this will not be included in the query. Always refer to the title and selftext for the user's question. Dont blabber according to these):\n${sortedComments.map(c => `- ${c.body} (by ${c.author})`).join('\n')}\n\n`;
