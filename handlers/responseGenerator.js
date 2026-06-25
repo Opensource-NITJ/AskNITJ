@@ -257,6 +257,31 @@ ${additionalContext}`;
 
         console.log(chalk.green(`\n=== PROMPT FOR [${isDM ? 'DM' : 'POST'} ${item.id}] ===\n${prompt}\n`));
 
+        // Calculate context sizes and token estimates
+        const contextChars = (contextText || '').length;
+        const additionalContextChars = (additionalContext || '').length;
+        const queryChars = (title || '').length + (contentText || '').length + (imageDescription || '').length + (videoDescription || '').length;
+        const systemInstructionChars = (systemInstruction || '').length;
+        const totalInputChars = systemInstructionChars + (prompt || '').length;
+
+        // Roughly: 4 chars = 1 token
+        const estSystemTokens = Math.ceil(systemInstructionChars / 4);
+        const estQueryTokens = Math.ceil(queryChars / 4);
+        const estContextTokens = Math.ceil(contextChars / 4);
+        const estAddContextTokens = Math.ceil(additionalContextChars / 4);
+        const estTotalInputTokens = Math.ceil(totalInputChars / 4);
+
+        console.log(chalk.blue.bold('\n┌──────────────────────────────────────────────────────────────┐'));
+        console.log(chalk.blue.bold('│             CONTEXT & INPUT TOKEN ESTIMATION                 │'));
+        console.log(chalk.blue.bold('├──────────────────────────────────────────────────────────────┤'));
+        console.log(`│ ${chalk.cyan('System Instruction:')} ${`${systemInstructionChars} chars (~${estSystemTokens} tokens)`.padEnd(41)} │`);
+        console.log(`│ ${chalk.cyan('Query Text:')}         ${`${queryChars} chars (~${estQueryTokens} tokens)`.padEnd(41)} │`);
+        console.log(`│ ${chalk.cyan('Database Context:')}   ${`${contextChars} chars (~${estContextTokens} tokens)`.padEnd(41)} │`);
+        console.log(`│ ${chalk.cyan('Additional Context:')} ${`${additionalContextChars} chars (~${estAddContextTokens} tokens)`.padEnd(41)} │`);
+        console.log(chalk.blue.bold('├──────────────────────────────────────────────────────────────┤'));
+        console.log(`│ ${chalk.yellow.bold('ESTIMATED INPUT TOKENS:')} ${`${estTotalInputTokens} tokens`.padEnd(35)} │`);
+        console.log(chalk.blue.bold('└──────────────────────────────────────────────────────────────┘\n'));
+
         const modelName =
           process.env.GENERATION_MODEL || 'qwen/qwen3.5-122b-a10b';
 
@@ -283,6 +308,22 @@ ${additionalContext}`;
           `Raw model response for ${isDM ? 'message' : 'post'} ${item.id}:`,
           content,
         );
+
+        if (response.usage) {
+          const actualPromptTokens = response.usage.prompt_tokens;
+          const actualCompletionTokens = response.usage.completion_tokens;
+          const actualTotalTokens = response.usage.total_tokens;
+
+          console.log(chalk.green.bold('\n┌──────────────────────────────────────────────────────────────┐'));
+          console.log(chalk.green.bold('│                 ACTUAL API TOKEN USAGE                       │'));
+          console.log(chalk.green.bold('├──────────────────────────────────────────────────────────────┤'));
+          console.log(`│ ${chalk.cyan('Actual Input Tokens:')} ${actualPromptTokens.toString().padEnd(40)} │`);
+          console.log(`│ ${chalk.cyan('Actual Output Tokens:')} ${actualCompletionTokens.toString().padEnd(39)} │`);
+          console.log(`│ ${chalk.cyan('Actual Total Tokens:')} ${actualTotalTokens.toString().padEnd(40)} │`);
+          console.log(chalk.green.bold('└──────────────────────────────────────────────────────────────┘\n'));
+        } else {
+          console.log(chalk.yellow(`[TOKEN USAGE] Actual token usage not returned by API endpoint.`));
+        }
 
         let responseData;
         try {
