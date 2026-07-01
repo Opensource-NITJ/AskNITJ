@@ -27,7 +27,7 @@ const keywordMatches = [
     file: 'placements/placements_2026_computer_science_and_engineering.md',
   },
   {
-    pattern: /\b(it|information\s*technology)\b/i,
+    pattern: /\b(information\s*technology)\b/i,
     file: 'placements/placements_2026_information_technology.md',
   },
   {
@@ -43,7 +43,7 @@ const keywordMatches = [
     file: 'placements/placements_2026_instrumentation_and_control_engineering.md',
   },
   {
-    pattern: /\b(me|mech|mechanical)\b/i,
+    pattern: /\b(mech|mechanical)\b/i,
     file: 'placements/placements_2026_mechanical_engineering.md',
   },
   {
@@ -374,6 +374,7 @@ const comparisonKeywords =
   /\b(iit|iiit|bits|thapar|pec|bhopal|jamshedpur|una|dtu|nsut|lnmiit|mit|vit|srm|manipal|rvce|bmsce|coep|vjti|ict|tiet|lpu|amity|chitkara|cgc|cuchd|vs|versus|comparison|compare|choose\s*between|which\s*is\s*better|better\s*than)\b/i;
 
 async function getRelevantContextFromPgvector(item, isDM) {
+  let candidateSources = '';
   try {
     let queryTitle = '';
     let queryBody = '';
@@ -558,7 +559,7 @@ async function getRelevantContextFromPgvector(item, isDM) {
       .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
       .slice(0, 5);
 
-    let candidateSources = '';
+    candidateSources = '';
     let docId = 1;
 
     let searchResults = '';

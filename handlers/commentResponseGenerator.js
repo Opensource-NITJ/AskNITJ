@@ -166,8 +166,9 @@ async function generateCommentResponse(
 
   const commentTree = await buildCommentTree(comment.id, comment.post_id);
 
+  const latestCommentText = commentTree[commentTree.length - 1]?.content || '';
   const commentEmbeddings = await getRelevantContextFromPgvector(
-    commentTree[0].content,
+    latestCommentText,
     false,
   );
   const postEmbeddings = await getRelevantContextFromPgvector(

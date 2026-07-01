@@ -197,14 +197,17 @@ async function resolveVideoUrl(videoUrl) {
   );
   for (const candidate of candidates) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(candidate, {
         method: 'HEAD',
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
-        timeout: 5000,
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       if (response.status === 200) {
         console.log(
           chalk.yellow('[VISION]') +

@@ -8,14 +8,6 @@ async function newDMProcessor(messages) {
     try {
       console.log(chalk.magenta('[DM]') + ` Processing DM ${message.id} from ${message.sender}: ${message.body.slice(0, 100)}...`);
 
-      await addDM({
-        id: message.id,
-        sender: message.sender,
-        recipient: process.env.REDDIT_USERNAME || 'AskNITJ',
-        body: message.body,
-        created_utc: message.created_utc,
-      });
-
       const chatHistory = await getDMHistory(message.sender, 20);
 
       let response = await generateDmResponse(
@@ -60,24 +52,7 @@ async function newDMProcessor(messages) {
           console.error(chalk.red('[ERROR]') + ` Error saving bot DM reply to database:`, dbErr.message);
         }
       } else {
-        const fallbackText = `I cannot help with this query.\n\n*I'm a bot*⋆.˚ ᡣ𐭩 .𖥔˚`;
-        const replyResult = await replyDM(message.id, fallbackText);
-        console.log(chalk.magenta('[DM]') + ` Skipped replying or sent fallback for DM ${message.id}: action is ${response.action}`);
-
-        try {
-          const replyData = replyResult?.json?.data?.things?.[0]?.data;
-          const botMsgId = replyData?.id || `bot_reply_${Date.now()}`;
-          const botMsgTime = replyData?.created_utc || Math.floor(Date.now() / 1000);
-          await addDM({
-            id: botMsgId,
-            sender: process.env.REDDIT_USERNAME || 'AskNITJ',
-            recipient: message.sender,
-            body: fallbackText,
-            created_utc: botMsgTime,
-          });
-        } catch (dbErr) {
-          console.error(chalk.red('[ERROR]') + ` Error saving fallback bot DM to database:`, dbErr.message);
-        }
+        console.log(chalk.magenta('[DM]') + ` Skipping DM ${message.id}: action is ${response.action}`);
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch (error) {
