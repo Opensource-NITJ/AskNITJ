@@ -5,10 +5,7 @@ import {
   pool,
   cleanRedditText,
 } from '../lib/database.js';
-import {
-  describeImage,
-  describeVideo,
-} from '../handlers/aiHelpers.js';
+import { describeImage, describeVideo } from '../handlers/aiHelpers.js';
 import fetch from 'node-fetch';
 import Reddit from 'reddit';
 import dotenv from 'dotenv';
@@ -20,7 +17,7 @@ const reddit = new Reddit({
   password: process.env.REDDIT_PASSWORD,
   appId: process.env.REDDIT_APP_ID,
   appSecret: process.env.REDDIT_APP_SECRET,
-  userAgent: 'NITJalandhar/1.0.0 (by Opensource@NITJalandhar)',
+  userAgent: 'NITJalandhar/1.2.0(by Opensource@NITJalandhar)',
 });
 
 async function redditGetWithRetry(
@@ -136,7 +133,10 @@ async function seed() {
         post_hint: child.data.post_hint || '',
         url: child.data.url || '',
         is_video: child.data.is_video || false,
-        video_url: child.data.media?.reddit_video?.fallback_url || child.data.secure_media?.reddit_video?.fallback_url || '',
+        video_url:
+          child.data.media?.reddit_video?.fallback_url ||
+          child.data.secure_media?.reddit_video?.fallback_url ||
+          '',
         fullname: child.kind + '_' + child.data.id,
       }));
 
@@ -175,24 +175,35 @@ async function seed() {
         // Describe media at seed time
         let imageDescription = '';
         const imageUrl = post.post_hint === 'image' ? post.url : null;
-        const videoUrl = (post.is_video || post.post_hint === 'hosted:video') ? (post.secure_media?.reddit_video?.fallback_url || post.video_url || '') : '';
+        const videoUrl =
+          post.is_video || post.post_hint === 'hosted:video'
+            ? post.secure_media?.reddit_video?.fallback_url ||
+              post.video_url ||
+              ''
+            : '';
 
         if (imageUrl) {
           try {
             console.log(`[${post.id}] Describing image...`);
             const image = await fetch(imageUrl);
             const mimeType = image.headers.get('Content-Type') || 'image/png';
-            const imageData = Buffer.from(await image.arrayBuffer()).toString('base64');
+            const imageData = Buffer.from(await image.arrayBuffer()).toString(
+              'base64',
+            );
             imageDescription = await describeImage(imageData, mimeType);
           } catch (err) {
-            console.warn(`[${post.id}] Failed to describe image: ${err.message}`);
+            console.warn(
+              `[${post.id}] Failed to describe image: ${err.message}`,
+            );
           }
         } else if (videoUrl) {
           try {
             console.log(`[${post.id}] Describing video...`);
             imageDescription = await describeVideo(videoUrl);
           } catch (err) {
-            console.warn(`[${post.id}] Failed to describe video: ${err.message}`);
+            console.warn(
+              `[${post.id}] Failed to describe video: ${err.message}`,
+            );
           }
         }
 
@@ -221,7 +232,9 @@ async function seed() {
           ],
         );
         postStored++;
-        console.log(`[${post.id}] -> Stored new post${imageDescription ? ' (with media description)' : ''}`);
+        console.log(
+          `[${post.id}] -> Stored new post${imageDescription ? ' (with media description)' : ''}`,
+        );
       }
 
       try {
