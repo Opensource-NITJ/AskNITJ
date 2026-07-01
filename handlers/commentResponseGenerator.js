@@ -176,13 +176,8 @@ async function generateCommentResponse(
     false,
   );
 
-  const botUsername = process.env.REDDIT_USERNAME || 'AskNITJ';
-  const nonBotComments = commentTree.filter(
-    (c) => c.role === 'user' || (c.name && c.name !== botUsername),
-  );
-  const hasThreadDepth =
-    nonBotComments.length > 1 &&
-    !(nonBotComments.length === 2 && commentTree.some((c) => c.name === botUsername));
+  const nonBotComments = commentTree.filter((c) => c.role === 'user');
+  const hasThreadDepth = nonBotComments.length > 1;
 
   let threadEmbeddings = null;
   if (hasThreadDepth) {

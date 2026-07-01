@@ -466,13 +466,13 @@ async function getRelevantContextFromPgvector(item, isDM) {
           ? `
             SELECT id, title, selftext, author, url, post_hint, video_url, image_description
             FROM posts
-            WHERE to_tsvector('english', title || ' ' || selftext) @@ to_tsquery('english', $1) AND id != $2
+            WHERE to_tsvector('english', title || ' ' || coalesce(selftext, '')) @@ to_tsquery('english', $1) AND id != $2
             LIMIT 10
           `
           : `
             SELECT id, title, selftext, author, url, post_hint, video_url, image_description
             FROM posts
-            WHERE to_tsvector('english', title || ' ' || selftext) @@ to_tsquery('english', $1)
+            WHERE to_tsvector('english', title || ' ' || coalesce(selftext, '')) @@ to_tsquery('english', $1)
             LIMIT 10
           `;
         const keywordPostQueryParams = currentPostId

@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import dotenv from 'dotenv';
 import fs from 'fs';
 import pkg from 'jsonschema';
 import { execSync } from 'child_process';
@@ -6,6 +7,8 @@ import path from 'path';
 import fetch from 'node-fetch';
 import Reddit from 'reddit';
 import chalk from 'chalk';
+
+dotenv.config();
 
 const { Validator } = pkg;
 
