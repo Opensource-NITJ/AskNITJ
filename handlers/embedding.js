@@ -673,12 +673,7 @@ async function getRelevantContextFromPgvector(item, isDM) {
       return 'No context available';
     }
 
-    console.log(
-      chalk.cyan('[RAG]') +
-        ' Candidate Sources:\n' +
-        candidateSources.slice(0, 1500) +
-        (candidateSources.length > 1500 ? '\n... [truncated]' : ''),
-    );
+    console.log(chalk.cyan('[RAG]') + ' Candidate sources prepared.');
 
     if (!process.env.NVIDIA_API_KEY) {
       console.warn(
