@@ -330,7 +330,7 @@ ${actionInstructions}`,
             );
             if (choice && choice >= 1 && choice <= candidates.length) {
               const selectedGif = candidates[choice - 1];
-              responseData.text = `${responseData.text}\n\n![gif](${selectedGif.url})`;
+              responseData.text = `${responseData.text}\n\n![gif](giphy|${selectedGif.id})`;
             }
           }
         }
