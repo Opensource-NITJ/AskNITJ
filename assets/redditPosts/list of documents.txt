@@ -42,7 +42,7 @@ Should be made on or after 1st April, 2025.
 7. Valid UDID card or Valid PwD certificate
 As per JoSAA format along with Doctor’s prescription issued by the medical board at the Physical Reporting Centre.
 
-This is only for PwD students.
+This is only for PwD students. Note that PwD candidates will undergo a mandatory re-medical check/medical board verification at the institute on their specific reporting day (typically the last day of reporting). The JoSAA medical certificate is not enough on its own; the doctors/medical board on campus will examine you and issue the final prescription/verification.
 
 8. Income Certificate issued on or after 01.04.2025
 This is only required for students who wish to get Fee Waiver.
