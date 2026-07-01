@@ -222,6 +222,21 @@ ${userOverview.data}`,
 
   messages.push(...commentTree);
 
+  let actionInstructions = `Keep the persona guidelines in mind and output a valid JSON matching the schema: { "action": "reply" | "query_user" | "reply_with_gif" | "dont_reply", "text": string, "gif_search_query": string }.
+- If the commenter is asking about themselves, complaining, boasting, or arguing, select "query_user" and set "text" to their username (e.g. "${comment.author}") to lookup their profile. Do NOT query yourself.
+- If a GIF fits the tone (e.g. jokes, memes, celebration), select "reply_with_gif" and set "gif_search_query" to search Giphy.`;
+
+  if (userOverview) {
+    actionInstructions += `\n- Since [USER PROFILE OVERVIEW FOR u/${userOverview.username}] is provided, you MUST construct a personalized, sarcastic reply/roast referencing details from their posting history (e.g. subreddits they visit, topics they discuss) in a witty bhaiya style. End with /s. Select "reply" or "reply_with_gif".`;
+  }
+
+  messages.push({
+    role: 'system',
+    content: `=== FINAL INSTRUCTIONS ===
+Please generate a response for the last comment in the thread.
+${actionInstructions}`,
+  });
+
   const primaryModel =
     process.env.GENERATION_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b';
   const fallbackModel =

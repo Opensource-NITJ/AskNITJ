@@ -168,7 +168,10 @@ function loadWikiEmbeddingsCache() {
     try {
       return JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
     } catch (e) {
-      console.error(chalk.red('[ERROR]') + ' Error reading wiki embeddings cache:', e.message);
+      console.error(
+        chalk.red('[ERROR]') + ' Error reading wiki embeddings cache:',
+        e.message,
+      );
     }
   }
   return {};
@@ -178,7 +181,10 @@ function saveWikiEmbeddingsCache(cache) {
   try {
     fs.writeFileSync(cacheFilePath, JSON.stringify(cache, null, 2), 'utf-8');
   } catch (e) {
-    console.error(chalk.red('[ERROR]') + ' Error writing wiki embeddings cache:', e.message);
+    console.error(
+      chalk.red('[ERROR]') + ' Error writing wiki embeddings cache:',
+      e.message,
+    );
   }
 }
 
@@ -200,7 +206,10 @@ async function getWikiEmbeddings() {
 
   for (const cachedPath of Object.keys(cache)) {
     if (!activePaths.has(cachedPath)) {
-      console.log(chalk.cyan('[RAG Cache]') + ` Removing deleted wiki file from cache: ${cachedPath}`);
+      console.log(
+        chalk.cyan('[RAG Cache]') +
+          ` Removing deleted wiki file from cache: ${cachedPath}`,
+      );
       delete cache[cachedPath];
       updated = true;
     }
@@ -216,7 +225,8 @@ async function getWikiEmbeddings() {
       embedding = cache[relativePath].embedding;
     } else {
       console.log(
-        chalk.cyan('[RAG Cache]') + ` Generating embedding for new/modified wiki file: ${relativePath}`
+        chalk.cyan('[RAG Cache]') +
+          ` Generating embedding for new/modified wiki file: ${relativePath}`,
       );
       try {
         const docEmbedOut = await generateEmbedding(content);
@@ -229,7 +239,8 @@ async function getWikiEmbeddings() {
         updated = true;
       } catch (error) {
         console.error(
-          chalk.red('[ERROR]') + ` Error generating embedding for ${relativePath}:`,
+          chalk.red('[ERROR]') +
+            ` Error generating embedding for ${relativePath}:`,
           error.message,
         );
         if (cache[relativePath]) {
@@ -305,12 +316,15 @@ async function searchTavily(query) {
     const apiKey = process.env.TAVILY_API_KEY;
     if (!apiKey) {
       console.warn(
-        chalk.yellow('[VISION]') + ' TAVILY_API_KEY is not defined. Skipping web search.',
+        chalk.yellow('[VISION]') +
+          ' TAVILY_API_KEY is not defined. Skipping web search.',
       );
       return '';
     }
 
-    console.log(chalk.yellow('[TAVILY SEARCH]') + ` Querying Tavily for: "${query}"`);
+    console.log(
+      chalk.yellow('[TAVILY SEARCH]') + ` Querying Tavily for: "${query}"`,
+    );
     const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',
       headers: {
@@ -328,14 +342,17 @@ async function searchTavily(query) {
     if (!response.ok) {
       const errText = await response.text();
       console.warn(
-        chalk.red('[ERROR]') + ` Tavily Search failed with status ${response.status}: ${errText}`
+        chalk.red('[ERROR]') +
+          ` Tavily Search failed with status ${response.status}: ${errText}`,
       );
       return '';
     }
 
     const data = await response.json();
     if (!data.results || data.results.length === 0) {
-      console.log(chalk.yellow('[TAVILY SEARCH]') + ` No results found for: "${query}"`);
+      console.log(
+        chalk.yellow('[TAVILY SEARCH]') + ` No results found for: "${query}"`,
+      );
       return '';
     }
 
@@ -345,7 +362,10 @@ async function searchTavily(query) {
 
     return snippets.join('\n\n');
   } catch (error) {
-    console.error(chalk.red('[ERROR]') + ' Error during Tavily search:', error.message);
+    console.error(
+      chalk.red('[ERROR]') + ' Error during Tavily search:',
+      error.message,
+    );
     return '';
   }
 }
@@ -373,7 +393,8 @@ async function getRelevantContextFromPgvector(item, isDM) {
     }
 
     console.log(
-      chalk.cyan('[RAG]') + ` Generating embedding for query text: "${queryText.slice(0, 80)}..."`
+      chalk.cyan('[RAG]') +
+        ` Generating embedding for query text: "${queryText.slice(0, 80)}..."`,
     );
 
     const queryEmbedOut = await generateEmbedding(queryText, 'query');
@@ -388,7 +409,8 @@ async function getRelevantContextFromPgvector(item, isDM) {
         if (rule.pattern.test(queryText) && doc.name === rule.file) {
           sim = Math.max(sim, 0.95);
           console.log(
-            chalk.cyan('[RAG Boost]') + ` Matched pattern ${rule.pattern} -> Boosting doc: ${doc.name} (Sim: 0.95+)`
+            chalk.cyan('[RAG Boost]') +
+              ` Matched pattern ${rule.pattern} -> Boosting doc: ${doc.name} (Sim: 0.95+)`,
           );
         }
       }
@@ -401,16 +423,31 @@ async function getRelevantContextFromPgvector(item, isDM) {
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, 4);
 
-    const vectorPostQuery = `
-      SELECT id, title, selftext, author, url, post_hint, video_url, image_description, 1 - (embedding <=> $1) AS similarity
-      FROM posts
-      WHERE embedding IS NOT NULL
-      ORDER BY similarity DESC
-      LIMIT 10
-    `;
-    const vectorPostResult = await pool.query(vectorPostQuery, [
-      embeddingString,
-    ]);
+    const currentPostId = item && typeof item === 'object' ? item.id : '';
+
+    const vectorPostQuery = currentPostId
+      ? `
+        SELECT id, title, selftext, author, url, post_hint, video_url, image_description, 1 - (embedding <=> $1) AS similarity
+        FROM posts
+        WHERE embedding IS NOT NULL AND id != $2
+        ORDER BY similarity DESC
+        LIMIT 10
+      `
+      : `
+        SELECT id, title, selftext, author, url, post_hint, video_url, image_description, 1 - (embedding <=> $1) AS similarity
+        FROM posts
+        WHERE embedding IS NOT NULL
+        ORDER BY similarity DESC
+        LIMIT 10
+      `;
+
+    const vectorPostQueryParams = currentPostId
+      ? [embeddingString, currentPostId]
+      : [embeddingString];
+    const vectorPostResult = await pool.query(
+      vectorPostQuery,
+      vectorPostQueryParams,
+    );
 
     const cleanTokens = queryText
       .replace(/[^\w\s]/g, ' ')
@@ -424,15 +461,31 @@ async function getRelevantContextFromPgvector(item, isDM) {
     let keywordPostResult = { rows: [] };
     if (tsQuery) {
       try {
-        const keywordPostQuery = `
-          SELECT id, title, selftext, author, url, post_hint, video_url, image_description
-          FROM posts
-          WHERE to_tsvector('english', title || ' ' || selftext) @@ to_tsquery('english', $1)
-          LIMIT 10
-        `;
-        keywordPostResult = await pool.query(keywordPostQuery, [tsQuery]);
+        const keywordPostQuery = currentPostId
+          ? `
+            SELECT id, title, selftext, author, url, post_hint, video_url, image_description
+            FROM posts
+            WHERE to_tsvector('english', title || ' ' || selftext) @@ to_tsquery('english', $1) AND id != $2
+            LIMIT 10
+          `
+          : `
+            SELECT id, title, selftext, author, url, post_hint, video_url, image_description
+            FROM posts
+            WHERE to_tsvector('english', title || ' ' || selftext) @@ to_tsquery('english', $1)
+            LIMIT 10
+          `;
+        const keywordPostQueryParams = currentPostId
+          ? [tsQuery, currentPostId]
+          : [tsQuery];
+        keywordPostResult = await pool.query(
+          keywordPostQuery,
+          keywordPostQueryParams,
+        );
       } catch (error) {
-        console.warn(chalk.red('[ERROR]') + ` Keyword search for posts failed: ${error.message}`);
+        console.warn(
+          chalk.red('[ERROR]') +
+            ` Keyword search for posts failed: ${error.message}`,
+        );
       }
     }
 
@@ -480,7 +533,10 @@ async function getRelevantContextFromPgvector(item, isDM) {
           process.env.REDDIT_USERNAME || 'AskNITJ',
         ]);
       } catch (error) {
-        console.warn(chalk.red('[ERROR]') + ` Keyword search for comments failed: ${error.message}`);
+        console.warn(
+          chalk.red('[ERROR]') +
+            ` Keyword search for comments failed: ${error.message}`,
+        );
       }
     }
 
@@ -508,14 +564,16 @@ async function getRelevantContextFromPgvector(item, isDM) {
     let searchResults = '';
     if (comparisonKeywords.test(queryText)) {
       console.log(
-        chalk.cyan('[RAG]') + ` Comparison intent detected. Fetching live internet context...`
+        chalk.cyan('[RAG]') +
+          ` Comparison intent detected. Fetching live internet context...`,
       );
       searchResults = await searchTavily(queryText.slice(0, 400));
       if (searchResults && searchResults.trim()) {
         candidateSources += `=== LIVE INTERNET SEARCH RESULTS ===\n[Document #${docId++}] Source: Tavily Live Search Results\nContent:\n${searchResults}\n---\n`;
       }
       console.log(
-        chalk.cyan('[RAG]') + ` Tavily search results length: ${searchResults.length} characters`
+        chalk.cyan('[RAG]') +
+          ` Tavily search results length: ${searchResults.length} characters`,
       );
     }
 
@@ -573,7 +631,8 @@ async function getRelevantContextFromPgvector(item, isDM) {
           }
         } catch (dbErr) {
           console.warn(
-            chalk.red('[ERROR]') + ` Failed to fetch post details for comment ${comment.id}: ${dbErr.message}`
+            chalk.red('[ERROR]') +
+              ` Failed to fetch post details for comment ${comment.id}: ${dbErr.message}`,
           );
         }
 
@@ -590,7 +649,8 @@ async function getRelevantContextFromPgvector(item, isDM) {
             }
           } catch (dbErr) {
             console.warn(
-              chalk.red('[ERROR]') + ` Failed to fetch parent comment details for comment ${comment.id}: ${dbErr.message}`
+              chalk.red('[ERROR]') +
+                ` Failed to fetch parent comment details for comment ${comment.id}: ${dbErr.message}`,
             );
           }
         }
@@ -612,9 +672,17 @@ async function getRelevantContextFromPgvector(item, isDM) {
       return 'No context available';
     }
 
+    console.log(
+      chalk.cyan('[RAG]') +
+        ' Candidate Sources:\n' +
+        candidateSources.slice(0, 1500) +
+        (candidateSources.length > 1500 ? '\n... [truncated]' : ''),
+    );
+
     if (!process.env.NVIDIA_API_KEY) {
       console.warn(
-        chalk.yellow('[RAG]') + ' NVIDIA_API_KEY is not defined, returning raw retrieved text.',
+        chalk.yellow('[RAG]') +
+          ' NVIDIA_API_KEY is not defined, returning raw retrieved text.',
       );
       return candidateSources;
     }
@@ -635,7 +703,8 @@ Instructions:
    - **REDDIT DISCUSSION CONSENSUS & OPINIONS**: Summarize the student consensus, advice, and opinions from the retrieved past posts and comments. Be specific about what advice was given. **Crucial**: Distinctly separate the consensus of the *query-specific thread* (the comments directly under the queried post) from other general/unrelated discussions. Do not merge or conflate opinions from other posts with the target post's specific thread.
 4. **CRITICAL GUIDELINE ON ENTITY PRECISION & FAITHFULNESS**:
    - Be extremely precise with names, institutes, and branches. Do NOT confuse or conflate distinct entities. Keep departments at different colleges strictly separate.
-   - Report the Reddit thread consensus faithfully. Summarize the advice given by users objectively as stated in the comments, without letting other statistics (like placement package numbers) bias your summary of their recommendations.
+   - Report the Reddit thread consensus faithfully. Summarize the advice given by users objectively as stated in the comments.
+   - **DO NOT BE OVERLY STRICT**: If the query is informal, social, or about campus life (e.g. canteens, libraries, hostels, csh, canteens locations, canteens on 5th floor, campus jokes, canteens names like Snackers), you MUST mark \`has_relevant_info\` as \`true\` and include all candidate comments or posts mentioning these locations, canteens, rules, or student tips under the REDDIT DISCUSSION CONSENSUS & OPINIONS section so that the bot has this background information.
 5. The output must be comprehensive, highly detailed, and thorough. Do not abbreviate, omit key metrics, or cut off early.
 6. Format the output as a valid JSON object matching this schema:
 {
@@ -669,7 +738,8 @@ ${candidateSources}`,
       const currentModel = retries === 1 ? fallbackModel : primaryModel;
       try {
         console.log(
-          chalk.cyan('[RAG]') + ` Querying synthesis model: ${currentModel} (attempt ${4 - retries}/3)`
+          chalk.cyan('[RAG]') +
+            ` Querying synthesis model: ${currentModel} (attempt ${4 - retries}/3)`,
         );
 
         const response = await openai.chat.completions.create({
@@ -683,18 +753,27 @@ ${candidateSources}`,
         const cleanedJson = cleanJsonString(synthesizedText);
         const resultObj = JSON.parse(cleanedJson);
 
-        if (resultObj.has_relevant_info && resultObj.context) {
+        if (
+          resultObj.context &&
+          resultObj.context.trim() &&
+          resultObj.context !== 'No context available'
+        ) {
           console.log(
-            chalk.cyan('[RAG]') + ` LLM successfully compiled highly specific context. Length: ${resultObj.context.length} chars.`
+            chalk.cyan('[RAG]') +
+              ` LLM compiled context. Length: ${resultObj.context.length} chars. (has_relevant_info: ${resultObj.has_relevant_info})`,
           );
           return resultObj.context;
         }
 
-        console.log(chalk.cyan('[RAG]') + ' LLM determined no context is relevant.');
-        return 'No context available';
+        console.log(
+          chalk.cyan('[RAG]') +
+            ' LLM determined no context is relevant. Falling back to raw candidate sources.',
+        );
+        return candidateSources;
       } catch (error) {
         console.error(
-          chalk.red('[ERROR]') + ` [RAG] Failed to compile context on attempt ${4 - retries}/3:`,
+          chalk.red('[ERROR]') +
+            ` [RAG] Failed to compile context on attempt ${4 - retries}/3:`,
           error.message,
         );
         retries--;
@@ -703,10 +782,13 @@ ${candidateSources}`,
         }
       }
     }
-    return 'No context available';
+    return candidateSources || 'No context available';
   } catch (error) {
-    console.error(chalk.red('[ERROR]') + ' [RAG] Error during pgvector RAG synthesis:', error.message);
-    return 'No context available';
+    console.error(
+      chalk.red('[ERROR]') + ' [RAG] Error during pgvector RAG synthesis:',
+      error.message,
+    );
+    return candidateSources || 'No context available';
   }
 }
 
@@ -727,7 +809,8 @@ async function storePosts(posts) {
 
         if (!effectiveSelftext && isCrosspostUrl(effectiveUrl)) {
           console.log(
-            chalk.green('[STORE]') + ` [${post.id}] Crosspost detected, fetching original...`
+            chalk.green('[STORE]') +
+              ` [${post.id}] Crosspost detected, fetching original...`,
           );
           const original = await fetchCrosspostContent(effectiveUrl);
           if (original) {
@@ -747,7 +830,8 @@ async function storePosts(posts) {
             }
             effectiveSelftext = parts.join('\n');
             console.log(
-              chalk.green('[STORE]') + ` [${post.id}] Built crosspost selftext (${effectiveSelftext.length} chars)`
+              chalk.green('[STORE]') +
+                ` [${post.id}] Built crosspost selftext (${effectiveSelftext.length} chars)`,
             );
 
             if (!effectivePostHint || effectivePostHint === 'link') {
@@ -762,7 +846,8 @@ async function storePosts(posts) {
             if (original.url && original.url !== effectiveUrl) {
               effectiveUrl = original.url;
               console.log(
-                chalk.green('[STORE]') + ` [${post.id}] Using original URL: ${effectiveUrl}`
+                chalk.green('[STORE]') +
+                  ` [${post.id}] Using original URL: ${effectiveUrl}`,
               );
             }
           }
@@ -782,19 +867,22 @@ async function storePosts(posts) {
           if (mediaType === 'image') {
             imageUrl = effectiveUrl;
             console.log(
-              chalk.green('[STORE]') + ` [${post.id}] Repost detected: link as image (${effectiveUrl})`
+              chalk.green('[STORE]') +
+                ` [${post.id}] Repost detected: link as image (${effectiveUrl})`,
             );
           } else if (mediaType === 'video') {
             if (/^https?:\/\/v\.redd\.it\//i.test(effectiveUrl)) {
               const baseVideoUrl = effectiveUrl.replace(/\/$/, '');
               videoUrl = `${baseVideoUrl}/CMAF_360.mp4?source=fallback`;
               console.log(
-                chalk.green('[STORE]') + ` [${post.id}] Repost detected: link as v.redd.it video`
+                chalk.green('[STORE]') +
+                  ` [${post.id}] Repost detected: link as v.redd.it video`,
               );
             } else {
               videoUrl = effectiveUrl;
               console.log(
-                chalk.green('[STORE]') + ` [${post.id}] Repost detected: link as video (${effectiveUrl})`
+                chalk.green('[STORE]') +
+                  ` [${post.id}] Repost detected: link as video (${effectiveUrl})`,
               );
             }
           }
@@ -803,12 +891,14 @@ async function storePosts(posts) {
         if (imageUrl) {
           try {
             console.log(
-              chalk.green('[STORE]') + ` [${post.id}] Describing image: ${imageUrl.slice(0, 80)}...`
+              chalk.green('[STORE]') +
+                ` [${post.id}] Describing image: ${imageUrl.slice(0, 80)}...`,
             );
             const image = await fetch(imageUrl);
             if (!image.ok) {
               console.warn(
-                chalk.cyan('[RAG Cache]') + ` [STORE ${post.id}] Image fetch failed (HTTP ${image.status})`
+                chalk.cyan('[RAG Cache]') +
+                  ` [STORE ${post.id}] Image fetch failed (HTTP ${image.status})`,
               );
             } else {
               const mimeType = image.headers.get('Content-Type') || 'image/png';
@@ -817,26 +907,31 @@ async function storePosts(posts) {
               );
               imageDescription = await describeImage(imageData, mimeType);
               console.log(
-                chalk.green('[STORE]') + ` [${post.id}] Image described (${imageDescription.length} chars)`
+                chalk.green('[STORE]') +
+                  ` [${post.id}] Image described (${imageDescription.length} chars)`,
               );
             }
           } catch (err) {
             console.warn(
-              chalk.red('[ERROR]') + ` [STORE ${post.id}] Failed to describe image: ${err.message}`
+              chalk.red('[ERROR]') +
+                ` [STORE ${post.id}] Failed to describe image: ${err.message}`,
             );
           }
         } else if (videoUrl) {
           try {
             console.log(
-              chalk.green('[STORE]') + ` [${post.id}] Describing video: ${videoUrl.slice(0, 80)}...`
+              chalk.green('[STORE]') +
+                ` [${post.id}] Describing video: ${videoUrl.slice(0, 80)}...`,
             );
             imageDescription = await describeVideo(videoUrl);
             console.log(
-              chalk.green('[STORE]') + ` [${post.id}] Video described (${imageDescription.length} chars)`
+              chalk.green('[STORE]') +
+                ` [${post.id}] Video described (${imageDescription.length} chars)`,
             );
           } catch (err) {
             console.warn(
-              chalk.red('[ERROR]') + ` [STORE ${post.id}] Failed to describe video: ${err.message}`
+              chalk.red('[ERROR]') +
+                ` [STORE ${post.id}] Failed to describe video: ${err.message}`,
             );
           }
         }
@@ -882,18 +977,26 @@ async function storePosts(posts) {
 
         storedCount++;
         console.log(
-          chalk.green('[STORE]') + ` Stored new post ${post.id} by ${post.author}: ${post.title}`
+          chalk.green('[STORE]') +
+            ` Stored new post ${post.id} by ${post.author}: ${post.title}`,
         );
       } else {
         skippedCount++;
-        console.log(chalk.green('[STORE]') + ` Skipped post ${post.id}: Already exists in database`);
+        console.log(
+          chalk.green('[STORE]') +
+            ` Skipped post ${post.id}: Already exists in database`,
+        );
       }
     }
     console.log(
-      chalk.green('[STORE]') + ` Stored ${storedCount} new posts, skipped ${skippedCount} existing posts`
+      chalk.green('[STORE]') +
+        ` Stored ${storedCount} new posts, skipped ${skippedCount} existing posts`,
     );
   } catch (error) {
-    console.error(chalk.red('[ERROR]') + ' Error storing posts:', error.message);
+    console.error(
+      chalk.red('[ERROR]') + ' Error storing posts:',
+      error.message,
+    );
   }
 }
 
@@ -923,15 +1026,20 @@ async function storeComments(comments) {
         );
         storedCount++;
         console.log(
-          chalk.green('[STORE]') + ` Stored new comment ${comment.id} by ${comment.author} on post ${comment.post_id}`
+          chalk.green('[STORE]') +
+            ` Stored new comment ${comment.id} by ${comment.author} on post ${comment.post_id}`,
         );
       }
     }
     console.log(
-      chalk.green('[STORE]') + ` Stored ${storedCount} new comments in database`
+      chalk.green('[STORE]') +
+        ` Stored ${storedCount} new comments in database`,
     );
   } catch (error) {
-    console.error(chalk.red('[ERROR]') + ' Error storing comments:', error.message);
+    console.error(
+      chalk.red('[ERROR]') + ' Error storing comments:',
+      error.message,
+    );
   }
 }
 
@@ -960,12 +1068,13 @@ async function storeDMs(messages) {
         );
         storedCount++;
         console.log(
-          chalk.green('[STORE]') + ` Stored new DM ${message.id} from ${message.sender}`
+          chalk.green('[STORE]') +
+            ` Stored new DM ${message.id} from ${message.sender}`,
         );
       }
     }
     console.log(
-      chalk.green('[STORE]') + ` Stored ${storedCount} new DMs in database`
+      chalk.green('[STORE]') + ` Stored ${storedCount} new DMs in database`,
     );
   } catch (error) {
     console.error(chalk.red('[ERROR]') + ' Error storing DMs:', error.message);

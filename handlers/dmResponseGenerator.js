@@ -73,12 +73,21 @@ ${historyStr}`,
         });
       }
 
+      let actionInstructions = `Keep the persona guidelines in mind and output a valid JSON matching the schema: { "action": "reply" | "query_user" | "reply_with_gif" | "dont_reply", "text": string, "gif_search_query": string }.
+- If the sender is asking about themselves, complaining, boasting, or arguing, select "query_user" and set "text" to their username (e.g. "${message.sender}") to lookup their profile. Do NOT query yourself.
+- If a GIF fits the tone (e.g. jokes, memes, celebration), select "reply_with_gif" and set "gif_search_query" to search Giphy.`;
+
+      if (userOverview) {
+        actionInstructions += `\n- Since [USER PROFILE OVERVIEW FOR u/${userOverview.username}] is provided, you MUST construct a personalized, sarcastic reply/roast referencing details from their posting history (e.g. subreddits they visit, topics they discuss) in a witty bhaiya style. End with /s. Select "reply" or "reply_with_gif".`;
+      }
+
       messages.push({
         role: 'user',
         content: `=== RETRIEVED CONTEXT ===
 ${context}
  
-Please generate a response for this Direct Message. Keep the persona guidelines in mind and output a valid JSON matching the schema: { "action": "reply" | "query_user" | "reply_with_gif" | "dont_reply", "text": string }.
+Please generate a response for this Direct Message.
+${actionInstructions}
  
 Direct Message to respond to:
 [Sender: u/${message.sender}]
