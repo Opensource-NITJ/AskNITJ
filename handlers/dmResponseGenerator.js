@@ -61,10 +61,13 @@ ${userOverview.data}`,
 
       if (chatHistory && chatHistory.length > 0) {
         const historyStr = chatHistory
-          .map(
-            (m) =>
-              `${m.sender === (process.env.REDDIT_USERNAME || 'AskNITJ') ? 'Bot' : 'User'}: ${m.body}`,
-          )
+          .map((m) => {
+            const isBot = m.sender === (process.env.REDDIT_USERNAME || 'AskNITJ');
+            const cleanBody = isBot
+              ? m.body.replace(/[\s\n]*\*I'm a bot\*[\s\S]*$/gi, '').trim()
+              : m.body;
+            return `${isBot ? 'Bot' : 'User'}: ${cleanBody}`;
+          })
           .join('\n');
         messages.push({
           role: 'system',
@@ -146,9 +149,10 @@ Content: ${messageBody}`,
           }
         }
 
+        const cleanedText = responseData.text.replace(/[\s\n]*\*I'm a bot\*[\s\S]*$/gi, '').trim();
         return {
           action: 'reply',
-          text: `${responseData.text}\n\n*I'm a bot*⋆.˚ ᡣ𐭩 .𖥔˚`,
+          text: `${cleanedText}\n\n*I'm a bot*⋆.˚ ᡣ𐭩 .𖥔˚`,
         };
       } else if (responseData.action === 'query_user') {
         return responseData;
