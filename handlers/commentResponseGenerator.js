@@ -176,6 +176,27 @@ async function generateCommentResponse(
     false,
   );
 
+  const botUsername = process.env.REDDIT_USERNAME || 'AskNITJ';
+  const nonBotComments = commentTree.filter(
+    (c) => c.role === 'user' || (c.name && c.name !== botUsername),
+  );
+  const hasThreadDepth =
+    nonBotComments.length > 1 &&
+    !(nonBotComments.length === 2 && commentTree.some((c) => c.name === botUsername));
+
+  let threadEmbeddings = null;
+  if (hasThreadDepth) {
+    const threadSummary = nonBotComments
+      .map((c) => c.content)
+      .join('\n')
+      .slice(0, 800);
+    console.log(
+      chalk.cyan('[COMMENT]') +
+        ` [${comment.id}] Thread has ${nonBotComments.length} non-bot comments, fetching thread context...`,
+    );
+    threadEmbeddings = await getRelevantContextFromPgvector(threadSummary, false);
+  }
+
   const postContext = {
     role: 'system',
     content: `[POST AUTHOR] u/${post.author}
@@ -205,6 +226,13 @@ async function generateCommentResponse(
     postEmbeddingContext,
     commentEmbeddingContext,
   ];
+
+  if (threadEmbeddings) {
+    messages.push({
+      role: 'system',
+      content: `[THREAD DISCUSSION EMBEDDINGS] ${threadEmbeddings}`,
+    });
+  }
 
   if (userOverview) {
     messages.push({
