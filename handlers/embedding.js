@@ -701,7 +701,7 @@ Instructions:
    - Be extremely precise with names, institutes, and branches. Do NOT confuse or conflate distinct entities. Keep departments at different colleges strictly separate.
    - Report the Reddit thread consensus faithfully. Summarize the advice given by users objectively as stated in the comments.
    - **DO NOT BE OVERLY STRICT**: If the query is informal, social, or about campus life (e.g. canteens, libraries, hostels, csh, canteens locations, canteens on 5th floor, campus jokes, canteens names like Snackers), you MUST mark \`has_relevant_info\` as \`true\` and include all candidate comments or posts mentioning these locations, canteens, rules, or student tips under the REDDIT DISCUSSION CONSENSUS & OPINIONS section so that the bot has this background information.
-5. The output must be comprehensive, highly detailed, and thorough. Do not abbreviate, omit key metrics, or cut off early.
+5. The output must be comprehensive, highly detailed, and thorough. Do not aggressively summarize or omit useful details from the retrieved comments/discussions. Include as much specific context, student quotes, and granular advice as possible. Prefer being thorough and descriptive over concise. Do not abbreviate, omit key metrics, or cut off early.
 6. Format the output as a valid JSON object matching this schema:
 {
   "has_relevant_info": boolean,
