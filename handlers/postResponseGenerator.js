@@ -250,9 +250,10 @@ ${videoUrl ? `Video URL: ${videoUrl}` : ''}`,
           }
         }
 
+        const cleanedText = responseData.text.replace(/[\s\n]*\*I'm a bot\*[\s\S]*$/gi, '').trim();
         return {
           action: 'reply',
-          text: `${responseData.text}\n\n*I'm a bot*⋆.˚ ᡣ𐭩 .𖥔˚`,
+          text: `${cleanedText}\n\n*I'm a bot*⋆.˚ ᡣ𐭩 .𖥔˚`,
         };
       } else if (responseData.action === 'query_user') {
         return responseData;

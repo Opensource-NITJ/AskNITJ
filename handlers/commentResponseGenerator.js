@@ -37,11 +37,14 @@ async function buildCommentTree(commentId, postId) {
   while (currentComment) {
     const isBot =
       currentComment.author === (process.env.REDDIT_USERNAME || 'AskNITJ');
+    const cleanBody = isBot
+      ? currentComment.body.replace(/[\s\n]*\*I'm a bot\*[\s\S]*$/gi, '').trim()
+      : currentComment.body;
     result.unshift({
       role: isBot ? 'assistant' : 'user',
       content: isBot
-        ? currentComment.body
-        : `[Author: u/${currentComment.author}] ${currentComment.body}`,
+        ? cleanBody
+        : `[Author: u/${currentComment.author}] ${cleanBody}`,
     });
     currentComment = commentMap.get(currentComment.parent_id);
   }
@@ -335,9 +338,10 @@ ${actionInstructions}`,
           }
         }
 
+        const cleanedText = responseData.text.replace(/[\s\n]*\*I'm a bot\*[\s\S]*$/gi, '').trim();
         return {
           action: 'reply',
-          text: `${responseData.text}\n\n*I'm a bot*⋆.˚ ᡣ𐭩 .𖥔˚`,
+          text: `${cleanedText}\n\n*I'm a bot*⋆.˚ ᡣ𐭩 .𖥔˚`,
         };
       } else if (responseData.action === 'query_user') {
         return responseData;
